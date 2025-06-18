@@ -34,7 +34,7 @@ ircBot.onAction(async ({ target, message, nick }) => {
     const t = performe.startTimer();
     if (target !== process.env.IRC_USERNAME) return;
 
-    const [, beatmapId] = message.match(/#\/(\d+)/) || [];
+    const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
     if (!beatmapId) return;
 
     const user = await getUser(nick);

@@ -113,9 +113,11 @@ node index.js
 ```bash
 src/
 ├── commands/      # Command handling logic
-├── core/          # Match engine, filters, queue manager
+├── compute/       # Match engine, filters, Algos..
+├── services/      # Queue manager, API, Redis..
 ├── models/        # Sequelize DB models
 ├── workers/       # Redis and async processors
+├── utils/         # Utils and parsers
 └── index.js       # Main bot entry point
 ```
 

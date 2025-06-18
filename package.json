@@ -1,0 +1,35 @@
+{
+  "name": "farbot_v2_fetch",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "chalk": "^5.4.1",
+    "child_process": "^1.0.2",
+    "cipherforge": "^1.0.3",
+    "cli-progress": "^3.12.0",
+    "dotenv": "^16.5.0",
+    "fs": "^0.0.1-security",
+    "googleapis": "^150.0.1",
+    "irc-framework": "^4.14.0",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.14.1",
+    "node-fetch": "^3.3.2",
+    "ojsama": "^2.2.0",
+    "open": "^10.1.2",
+    "osu-utils": "^1.0.0",
+    "p-limit": "^6.2.0",
+    "path": "^0.12.7",
+    "progress": "^2.0.3",
+    "redis": "^5.1.1",
+    "sequelize": "^6.37.7",
+    "winston": "^3.17.0"
+  }
+}

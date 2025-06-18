@@ -5,8 +5,11 @@ Pupsbot is an osu! recommendation bot designed to help players find fresh, high-
 ---
 You can join the Discord server to stay informed about future updates, give feedback, or report bugs.
 
-[![Join our Discord](https://techalchemy.fr/bannerdiscord.png)](https://discord.gg/QzZGf7jz6f)
-
+<p align="center">
+  <a href="https://discord.gg/QzZGf7jz6f">
+    <img src="https://techalchemy.fr/bannerdiscord.png" alt="Join our Discord">
+  </a>
+</p>
 ---
 
 ## Overview
@@ -49,12 +52,16 @@ This will return a recommended map based on your current skill level and recent 
 
 Pupsbot supports 4 syntaxes for controlling which mods are used in the recommendation:
 
+<div align="center">
+
 | Syntax            | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
 | `!bm`             | Returns any map, with any mod combination                                    |
 | `!bm NM`          | Forces the recommendation to be a **No Mod** map                            |
 | `!bm <mods>`      | Forces the recommendation to match **only** those mods (e.g. `!bm HDHR`)    |
 | `!bm + <mods>`    | Recommends a map that **includes** the mods you wrote, but allows more mods |
+
+</div>
 
 ---
 

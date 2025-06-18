@@ -10,6 +10,7 @@ You can join the Discord server to stay informed about future updates, give feed
     <img src="https://techalchemy.fr/bannerdiscord.png" alt="Join our Discord">
   </a>
 </p>
+
 ---
 
 ## Overview

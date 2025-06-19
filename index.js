@@ -6,6 +6,67 @@ const Performe = require('./services/Performe');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const generateId = require('./utils/generateId');
 const { getUser } = require('./services/osuApi');
+const performe = new Performe();
+performe.init();
+
+
+const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
+
+const loopDelay = monitorEventLoopDelay({ resolution: 10 });
+loopDelay.enable();
+
+const gcTypes = {
+    [constants.NODE_PERFORMANCE_GC_MAJOR]: 'major',
+    [constants.NODE_PERFORMANCE_GC_MINOR]: 'minor',
+    [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: 'incremental',
+    [constants.NODE_PERFORMANCE_GC_WEAKCB]: 'weakcb'
+};
+
+const gcLog = [];
+const gcObserver = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+        gcLog.push({ type: gcTypes[entry.kind] || 'unknown', duration: entry.duration });
+    }
+});
+gcObserver.observe({ entryTypes: ['gc'] });
+
+setInterval(() => {
+    const mem = process.memoryUsage();
+    const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
+    const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
+    const externalMB = (mem.external / 1024 / 1024).toFixed(2);
+
+    const cpu = process.cpuUsage();
+    const userCPUms = (cpu.user / 1000).toFixed(2);
+    const sysCPUms = (cpu.system / 1000).toFixed(2);
+
+    const res = process.resourceUsage();
+    const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
+
+    const lagMean = loopDelay.mean / 1e6;
+    const lagMax = loopDelay.max / 1e6;
+    const lagStddev = loopDelay.stddev / 1e6;
+
+    const recentGCs = gcLog.splice(0, gcLog.length);
+    const gcSummary = recentGCs.length
+        ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
+        : 'none';
+
+    console.clear();
+    performe.logDuration('HEAP', heapUsedMB)
+    performe.logDuration('RSS', rssMB)
+    performe.logDuration('HEAPEXT', externalMB)
+    performe.logDuration('UCPU', userCPUms)
+    performe.logDuration('SCPU', sysCPUms)
+    performe.logDuration('MRSS', maxRSSMB)
+    performe.logDuration('ELOOPLMEN', lagMean.toFixed(2))
+    performe.logDuration('ELOOPLMAX', lagMax.toFixed(2))
+    performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2))
+    performe.logDuration('GCOL', gcSummary)
+}, 1000);
+
+
+
 const lastRequests = {};
 const ircBot = new OsuIRCClient({
     username: process.env.IRC_USERNAME,
@@ -22,8 +83,7 @@ const queue = new IRCQueueManager(
         enableLogs: true
     }
 );
-const performe = new Performe();
-performe.init();
+
 setInterval(() => {
     performe.heartbeat().catch(() => { });
 }, 10);

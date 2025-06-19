@@ -52,6 +52,7 @@ function pickBestRandomPrecision(filtered) {
 process.on('message', async (data) => {
     const db = new Thread2Database();
     await db.connect();
+    const startTime = Date.now();
     try {
         const performe = new Performe();
         performe.init();
@@ -59,9 +60,6 @@ process.on('message', async (data) => {
 
         console.log(`[Worker] ${new Date().toLocaleString('fr-FR')} ${data.event.id} Starting processing...`);
         const params = parseCommandParameters(data.event.message);
-        const startTime = Date.now();
-
-
 
         const sug = await db.getSug(data.user.id);
         const top100Set = await getTop100(data.user.id, data.event.id);

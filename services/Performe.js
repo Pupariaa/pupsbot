@@ -60,6 +60,25 @@ class Performe {
         };
     }
 
+    async markPending(id, ttl = 30) {
+        await this._ensureReady();
+        const timestamp = Date.now();
+        await this._redis.set(`pending:${id}`, '1', { EX: ttl });
+        await this._redis.zAdd('unresolved:pending', [{ score: timestamp, value: id.toString() }]);
+    }
+
+    async markResolved(id) {
+        await this._ensureReady();
+        await this._redis.del(`pending:${id}`);
+        await this._redis.zRem('unresolved:pending', id.toString());
+    }
+
+    async _ensureReady() {
+        if (!this._connected) {
+            await this.init();
+        }
+    }
+
     async _ensureReady() {
         if (!this._connected) {
             await this.init();

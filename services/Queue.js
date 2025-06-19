@@ -32,13 +32,13 @@ class IRCQueueManager {
             }
 
             const alreadyQueued = this._queue.filter(t => t.target === target).length;
-            if (alreadyQueued >= 1) {
+            if (alreadyQueued >= 2) {
                 this._queue = this._queue.filter(t => t.target !== target);
                 this._blockedUsers.set(target, now + 30000);
 
                 await this._sendFunction(
                     target,
-                    `⛔ Please stop spamming. Your behavior causes delays for others... :(  You have been blocked for 30 seconds.`
+                    `⛔ Please stop spamming... Your behavior causes delays for others... :(  You have been blocked for 30 seconds.`
                 );
                 return;
             }

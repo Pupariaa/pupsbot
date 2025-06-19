@@ -52,7 +52,6 @@ setInterval(() => {
         ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
         : 'none';
 
-    console.clear();
     performe.logDuration('HEAP', heapUsedMB)
     performe.logDuration('RSS', rssMB)
     performe.logDuration('HEAPEXT', externalMB)

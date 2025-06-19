@@ -123,7 +123,6 @@ process.on('message', async (data) => {
         await db.setSug(data.user.id, selected.beatmap_id);
         await db.setHistory(data.event.id, data.event.message, responseMessage, data.user.id, data.event.nick, true, elapsedTime, data.user.locale);
         await db.disconnect();
-        process.exit(0);
 
     } catch (e) {
         await performe.logDuration('BM', await t.stop('BM'))
@@ -133,7 +132,22 @@ process.on('message', async (data) => {
         const elapsedTime = Date.now() - startTime;
         await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsedTime);
         await db.disconnect();
-        process.exit(0);
+
+    } finally {
+
+        sortList.length = 0;
+        filtered.length = 0;
+        sug.length = 0;
+        selected = null;
+        beatmap = null;
+        results = null;
+        top100Set = null;
+
+        process.removeAllListeners();
+
+        if (global.gc) global.gc();
+
+        setTimeout(() => process.exit(0), 50);
     }
 
 });

@@ -56,17 +56,26 @@ process.on('message', async (data) => {
     const performe = new Performe();
     performe.init();
     const t = performe.startTimer();
+
+    let sortList
+    let filtered
+    let sug
+    let selected = null;
+    let beatmap = null;
+    let results = null;
+    let top100Set = null;
+
     try {
 
         console.log(`[Worker] ${new Date().toLocaleString('fr-FR')} ${data.event.id} Starting processing...`);
         const params = parseCommandParameters(data.event.message);
 
-        const sug = await db.getSug(data.user.id);
-        const top100Set = await getTop100(data.user.id, data.event.id);
+        sug = await db.getSug(data.user.id);
+        let top100Set = await getTop100(data.user.id, data.event.id);
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.id);
-        const results = await findScoresByPPRange({ min, max }, params.mods, data);
+        results = await findScoresByPPRange({ min, max }, params.mods, data);
 
-        let filtered = filterByMods(results, params.mods, params.allowOtherMods);
+        filtered = filterByMods(results, params.mods, params.allowOtherMods);
         const targetPP = top100Set.possibles[0] ? top100Set.possibles[0].brut - 20.25 : null;
 
         filtered = filterOutTop100(filtered, top100Set.table);
@@ -77,8 +86,8 @@ process.on('message', async (data) => {
 
         const now = Date.now();
 
-        let sortList = [];
-        let selected = null;
+        sortList = [];
+        selected = null;
 
 
         const t2 = performe.startTimer();
@@ -135,9 +144,9 @@ process.on('message', async (data) => {
 
     } finally {
 
-        sortList.length = 0;
-        filtered.length = 0;
-        sug.length = 0;
+        sortList = null;
+        filtered = null;
+        sug = null;
         selected = null;
         beatmap = null;
         results = null;

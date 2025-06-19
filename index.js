@@ -24,7 +24,9 @@ const queue = new IRCQueueManager(
 );
 const performe = new Performe();
 performe.init();
-
+setInterval(() => {
+    performe.heartbeat().catch(() => { });
+}, 10);
 
 const commandManager = new CommandManager();
 ircBot.connect();

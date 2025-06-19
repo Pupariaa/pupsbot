@@ -65,6 +65,11 @@ class Performe {
             await this.init();
         }
     }
+
+    async heartbeat() {
+        await this._ensureReady();
+        await this._redis.set('bot:main:heartbeat', Date.now().toString());
+    }
 }
 
 module.exports = Performe;

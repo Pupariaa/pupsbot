@@ -44,7 +44,7 @@ ircBot.onAction(async ({ target, message, nick }) => {
     const result = await calculatePPWithMods(beatmapId);
     if (result.error) {
         await queue.addToQueue(nick, result.error);
-        performe.logCommand(await t.stop('CMDNP'), 'CMDNP')
+        performe.logDuration('CMDNP', await t.stop('CMDNP'))
         return;
     }
     const summary = result.NoMod;
@@ -56,7 +56,8 @@ ircBot.onAction(async ({ target, message, nick }) => {
     };
 
     const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de détails' : '!mods for more details'}`;
-    performe.logCommand(await t.stop('CMDNP'), 'CMDNP')
+    performe.logCommand(user.id, 'CMDNP')
+    performe.logDuration('CMDNP', await t.stop('CMDNP'))
     await queue.addToQueue(nick, out);
 });
 

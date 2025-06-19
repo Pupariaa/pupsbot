@@ -10,7 +10,7 @@ async function getUser(username, id) {
     await performe.init();
     const t = performe.startTimer();
     const { data } = await axios.get(`https://osu.ppy.sh/api/get_user?k=${process.env.OSU_API_KEY}&u=${username}&m=0`);
-    await performe.logCommand(await t.stop('GETUSER'), 'GETUSER')
+    await performe.logDuration('GETUSER', await t.stop('GETUSER'))
     await performe.close();
     return {
         locale: data[0].country,
@@ -34,7 +34,7 @@ async function getTop100(userId, id) {
 
     const response = await axios.get('https://osu.ppy.sh/api/get_user_best', { params });
     const rawScores = response.data || [];
-    await performe.logCommand(await t.stop('GETTOP'), 'GETTOP')
+    await performe.logDuration('GETTOP', await t.stop('GETTOP'))
     await performe.close();
 
     const scores = rawScores.map((entry, index) => ({
@@ -95,7 +95,7 @@ async function getBeatmap(bid) {
     await performe.init();
     const t = performe.startTimer();
     const { data } = await axios.get(`https://osu.ppy.sh/api/get_beatmaps?k=${process.env.OSU_API_KEY}&b=${bid}`);
-    await performe.logCommand(await t.stop('GETMAP'), 'GETMAP')
+    await performe.logDuration('GETMAP', await t.stop('GETMAP'))
     await performe.close();
     return data[0];
 }

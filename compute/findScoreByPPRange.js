@@ -6,7 +6,7 @@ async function findScoresByPPRange(range, mods, id) {
     await performe.init();
     const t = performe.startTimer();
     if (!range || typeof range.min !== 'number' || typeof range.max !== 'number') {
-        await performe.logCommand(await t.stop('FSBPR'), 'FSBPR')
+        await performe.logDuration('FSBPR', await t.stop('FSBPR'))
         await performe.close();
         throw new Error(`${new Date().toLocaleString('fr-FR')} ${id} Invalid range object`);
     }
@@ -61,8 +61,8 @@ async function findScoresByPPRange(range, mods, id) {
             return { scoreId: id, ...data };
         })
     );
-    await performe.logCommand(await t2.stop('RREAD'), 'RREAD')
-    await performe.logCommand(await t.stop('FSBPR'), 'FSBPR')
+    await performe.logDuration('RREAD', await t2.stop('RREAD'))
+    await performe.logDuration('FSBPR', await t.stop('FSBPR'))
     await performe.close();
     await redis.quit();
     return scores;

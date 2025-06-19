@@ -53,10 +53,10 @@ process.on('message', async (data) => {
     const db = new Thread2Database();
     await db.connect();
     const startTime = Date.now();
+    const performe = new Performe();
+    performe.init();
+    const t = performe.startTimer();
     try {
-        const performe = new Performe();
-        performe.init();
-        const t = performe.startTimer();
 
         console.log(`[Worker] ${new Date().toLocaleString('fr-FR')} ${data.event.id} Starting processing...`);
         const params = parseCommandParameters(data.event.message);
@@ -104,10 +104,10 @@ process.on('message', async (data) => {
             }
         }
         selected = pickBestRandomPrecision(sortList);
-        await performe.logCommand(await t2.stop('SORTBM'), 'SORTBM')
+        await performe.logDuration('SORTBM', await t2.stop('SORTBM'))
         if (!selected) {
             const elapsedTime = Date.now() - startTime;
-            const message = SendNotFoundBeatmapMessage(userInfo[0].country, elapsedTime);
+            const message = SendNotFoundBeatmapMessage(data.user.country, elapsedTime);
             process.send({ username: data.event.nick, response: message, uid: data.event.id });
             await db.setHistory(data.event.id, data.event.message, message, data.user.id, data.event.nick, false, elapsedTime);
             await db.disconnect();
@@ -116,7 +116,8 @@ process.on('message', async (data) => {
         const beatmap = await getBeatmap(selected.beatmap_id);
         const elapsedTime = Date.now() - startTime;
         const responseMessage = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, elapsedTime);
-        await performe.logCommand(await t.stop('BM'), 'BM')
+        await performe.logDuration('BM', await t.stop('BM'))
+        await performe.logCommand(data.user.id, 'BM')
         await performe.close();
         process.send({ username: data.event.nick, response: responseMessage, uid: data.event.id, beatmapId: selected.beatmap_id, userId: data.user.id });
         await db.setSug(data.user.id, selected.beatmap_id);
@@ -125,6 +126,9 @@ process.on('message', async (data) => {
         process.exit(0);
 
     } catch (e) {
+        await performe.logDuration('BM', await t.stop('BM'))
+        await performe.logCommand(data.user.id, 'BM')
+        await performe.close();
         console.error(e);
         const elapsedTime = Date.now() - startTime;
         await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsedTime);

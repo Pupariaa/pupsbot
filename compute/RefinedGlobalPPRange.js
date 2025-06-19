@@ -28,7 +28,7 @@ async function computeRefinedGlobalPPRange(userPP, topScores, id) {
         else if (ratio < 0.95) skew = -base * 0.3;
     }
 
-    await performe.logCommand(await t.stop('RGPPR'), 'RGPPR')
+    await performe.logDuration('RGPPR', await t.stop('RGPPR'))
     await performe.close();
     return {
         min: userPP - base + Math.min(0, skew),

@@ -126,15 +126,8 @@ ircBot.onMessage(async (event) => {
         if (!msg.startsWith('!')) return;
         event.id = id = generateId();
         await commandManager.handleMessage(event, queue, lastRequests);
-
-        child.on('message', async (msgFromWorker) => {
-            if (msgFromWorker && msgFromWorker.username && msgFromWorker.response) {
-                await queue.addToQueue(msgFromWorker.username, msgFromWorker.response);
-            }
-        })
     }
 });
-
 
 
 process.on('uncaughtException', (err) => {

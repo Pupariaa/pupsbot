@@ -52,7 +52,9 @@ async function getTop100(userId, id) {
 
     const gainCandidates = [];
 
-    for (let pp = 100; pp <= 500; pp++) {
+    for (let pp = 5; pp <= 2000; pp += pp < 500 ? 1 : (pp < 1000 ? 5 : 10)) {
+        if (pp <= scores[99]?.raw_pp) continue;
+
         const hypothetical = [...scores, { raw_pp: pp }];
         const top100 = hypothetical
             .sort((a, b) => b.raw_pp - a.raw_pp)
@@ -66,6 +68,7 @@ async function getTop100(userId, id) {
         const gain = newTotalPP - baseWeightedPP;
         const rank = top100.findIndex(score => score.raw_pp === pp);
 
+        if (rank === -1) continue;
         if (gain >= 20) {
             gainCandidates.push({
                 brut: pp,

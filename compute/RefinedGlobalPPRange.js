@@ -17,15 +17,15 @@ async function computeRefinedGlobalPPRange(userPP, topScores, id) {
         ? recentPP.reduce((sum, pp) => sum + pp, 0) / recentPP.length
         : null;
 
-    const base = Math.max(50, Math.min(1000, Math.log10(userPP + 1) * 75));
+    const base = Math.max(60, Math.min(1100, Math.log10(userPP + 1) * 82));
     let skew = 0;
 
     if (averageRecent !== null) {
         const expected = userPP * 0.06;
         const ratio = averageRecent / expected;
 
-        if (ratio > 1.05) skew = base * 0.5;
-        else if (ratio < 0.95) skew = -base * 0.3;
+        if (ratio > 1.05) skew = base * 0.55;
+        else if (ratio < 0.95) skew = -base * 0.35;
     }
 
     await performe.logDuration('RGPPR', await t.stop('RGPPR'))

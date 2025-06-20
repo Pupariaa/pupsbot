@@ -5,9 +5,8 @@ module.exports = {
     name: 'bm',
     async execute(event, args, queue) {
         const performe = new Performe();
-        child = fork((__dirname, '..', 'workers/bm.js'));
         await performe.markPending(event.id);
-
+        child = fork((__dirname, '..', 'workers/bm.js'));
         let user = await getUser(event.nick);
         try {
             child.send({ event, user });

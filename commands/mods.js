@@ -1,8 +1,11 @@
 const { getUser } = require('../services/osuApi');
 const Thread2Database = require('../services/SQL');
+const Performe = require('../services/Performe');
 module.exports = {
     name: 'mods',
     async execute(event, _, queue, lastRequests) {
+        const performe = new Performe();
+        await performe.markPending(event.id);
         const db = new Thread2Database();
         await db.connect();
         const u = await getUser(event.nick);
@@ -33,5 +36,6 @@ module.exports = {
         await queue.addToQueue(event.nick, responseMessage.trim(), true);
         await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         await db.disconnect();
+        await performe.markResolved(event.id);
     }
 };

@@ -20,7 +20,7 @@ async function findScoresByPPRange(range, mods, id) {
         local ids = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'LIMIT', 0, 1000000)
         local result = {}
         local count = 0
-        local maxResults = 100000
+        local maxResults = 1000000
         local modFilter = ARGV[3]
 
     for _, id in ipairs(ids) do

@@ -1,4 +1,5 @@
 require('dotenv').config();
+const os = require('os');
 const OsuIRCClient = require("./services/IRC");
 const IRCQueueManager = require("./services/Queue");
 const CommandManager = require('./services/Commands');
@@ -30,15 +31,35 @@ const gcObserver = new PerformanceObserver((list) => {
 });
 gcObserver.observe({ entryTypes: ['gc'] });
 
+async function getCPUUsagePercent(durationMs = 100) {
+    const startUsage = process.cpuUsage();
+    const startTime = process.hrtime();
+
+    await new Promise(resolve => setTimeout(resolve, durationMs));
+
+    const elapTime = process.hrtime(startTime);
+    const elapUsage = process.cpuUsage(startUsage);
+
+    const elapTimeMs = (elapTime[0] * 1000) + (elapTime[1] / 1e6);
+    const elapUserMs = elapUsage.user / 1000;
+    const elapSysMs = elapUsage.system / 1000;
+    const totalCPUms = elapUserMs + elapSysMs;
+
+    const cores = os.cpus().length;
+    const cpuPercent = (totalCPUms / (elapTimeMs * cores)) * 100;
+
+    return {
+        userCPU: elapUserMs.toFixed(2),
+        systemCPU: elapSysMs.toFixed(2),
+        cpuPercent: cpuPercent.toFixed(2)
+    };
+}
+
 setInterval(() => {
     const mem = process.memoryUsage();
     const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
     const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
     const externalMB = (mem.external / 1024 / 1024).toFixed(2);
-
-    const cpu = process.cpuUsage();
-    const userCPUms = (cpu.user / 1000).toFixed(2);
-    const sysCPUms = (cpu.system / 1000).toFixed(2);
 
     const res = process.resourceUsage();
     const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
@@ -55,14 +76,20 @@ setInterval(() => {
     performe.logDuration('HEAP', heapUsedMB)
     performe.logDuration('RSS', rssMB)
     performe.logDuration('HEAPEXT', externalMB)
-    performe.logDuration('UCPU', userCPUms)
-    performe.logDuration('SCPU', sysCPUms)
+
     performe.logDuration('MRSS', maxRSSMB)
     performe.logDuration('ELOOPLMEN', lagMean.toFixed(2))
     performe.logDuration('ELOOPLMAX', lagMax.toFixed(2))
     performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2))
     performe.logDuration('GCOL', gcSummary)
+    getCPUUsagePercent().then(res => {
+        console.log(res)
+        performe.logDuration('UCPU', res.userCPU)
+        performe.logDuration('SCPU', res.systemCPU)
+    });
 }, 1000);
+
+
 
 
 

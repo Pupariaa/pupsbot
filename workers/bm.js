@@ -79,10 +79,9 @@ process.on('message', async (data) => {
         top100Set = top100Set.osu;
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.ids, sum);
         results = await findScoresByPPRange({ min, max }, params.mods, data);
-
         filtered = filterByMods(results, params.mods, params.allowOtherMods);
-
         const targetPP = computeTargetPP(top100Set.tr, sum);
+        console.log(targetPP)
 
         filtered = filterOutTop100(filtered, top100Set.table);
         filtered = filtered

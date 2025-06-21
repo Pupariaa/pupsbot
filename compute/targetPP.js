@@ -33,7 +33,7 @@ function computeTargetPP(topScores, userMetrics) {
 
     if (target <= pivotPP) target = pivotPP + 1;
 
-    return parseFloat(Math.round(target * 100) / 100).toFixed(2);
+    return parseFloat(Math.round(target * 100) / 100).toFixed(0);
 }
 
 module.exports = computeTargetPP;

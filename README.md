@@ -149,7 +149,7 @@ osu! user: Puparia
 ## Special thanks
 
 - Vanilleu ♥
-- Lakazatong ♥
+- lakazatong ♥
 
 ## About the Author
 
@@ -159,7 +159,7 @@ In **November 2014**, I created my own account. For years, I played almost exclu
 
 osu! became more than a game — it became a space where I learned, grew, and created. I participated in tournaments, made long-term friends, and started designing tools and bots for the community. Most of those projects never made it past the prototype stage. Only one actually went live: **Farbot**, my first bot, built about four years ago. It worked, but it was **technically fragile and never gained much visibility**. It wasn't sustainable.
 
-In **January 2025**, I decided to start from scratch — same technology base, but with a cleaner vision. Even then, I hit a lot of limitations and issues. So I reworked everything from the ground up, alone, guided by what I had learned over the years. I also received essential technical advice from **[Lakazatong](https://github.com/lakazatong)**, who helped me push the architecture further.
+In **January 2025**, I decided to start from scratch — same technology base, but with a cleaner vision. Even then, I hit a lot of limitations and issues. So I reworked everything from the ground up, alone, guided by what I had learned over the years. I also received essential technical advice from **[lakazatong](https://github.com/lakazatong)**, who helped me push the architecture further.
 
 But more than anything, **[Vanille](https://osu.ppy.sh/users/31114903)** played a key role in helping me bring heart to the project. She reminded me that a bot isn’t just about precision or numbers — it’s about **people**. Her support and perspective gave the project a much-needed human side, and helped me stay focused through setbacks.
 

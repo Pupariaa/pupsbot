@@ -3,15 +3,18 @@ require('dotenv').config();
 
 const computeRefinedGlobalPPRange = require('../compute/RefinedGlobalPPRange');
 const findScoresByPPRange = require('../compute/findScoreByPPRange');
+const computeCrossModeProgressionPotential = require('../compute/CrossModeProgressionPotential');
+const computeTargetPP = require('../compute/targetPP');
 
 const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
 
 const modsToBitwise = require('../utils/osu/modsToBitwise');
 const parseCommandParameters = require('../utils/parser/bmParser');
 
-const { getTop100, getBeatmap } = require('../services/osuApi');
+const { getTop100MultiMods, getBeatmap } = require('../services/osuApi');
 
 const Thread2Database = require('../services/SQL');
+
 
 
 function filterOutTop100(results, beatmapIdSet) {
@@ -71,12 +74,19 @@ process.on('message', async (data) => {
         const params = parseCommandParameters(data.event.message);
 
         sug = await db.getSug(data.user.id);
-        let top100Set = await getTop100(data.user.id, data.event.id);
-        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.id);
+        let top100Set = await getTop100MultiMods(data.user.id, data.event.id);
+        let sum = computeCrossModeProgressionPotential(data.user.id, top100Set);
+        top100Set = top100Set.osu;
+        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.ids, sum);
         results = await findScoresByPPRange({ min, max }, params.mods, data);
 
+        console.log(sum)
+        console.log(sum)
         filtered = filterByMods(results, params.mods, params.allowOtherMods);
-        const targetPP = top100Set.possibles[0] ? top100Set.possibles[0].brut - 20.25 : null;
+
+        console.log({ min, max })
+        const targetPP = computeTargetPP(top100Set.tr, sum);
+        console.log(targetPP)
 
         filtered = filterOutTop100(filtered, top100Set.table);
         filtered = filtered

@@ -72,6 +72,12 @@ function specsModifier(mods, stats) {
     if (result.cs > 10) result.cs = 10;
     if (result.hp > 10) result.hp = 10;
 
+    result.ar = Math.round(result.ar * 10) / 10;
+    result.od = Math.round(result.od * 10) / 10;
+    result.cs = Math.round(result.cs * 10) / 10;
+    result.hp = Math.round(result.hp * 10) / 10;
+    result.bpm = Math.round(result.bpm);
+
     return result;
 }
 module.exports = specsModifier;

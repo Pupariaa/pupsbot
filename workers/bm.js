@@ -67,6 +67,8 @@ process.on('message', async (data) => {
     let beatmap = null;
     let results = null;
     let top100Set = null;
+    let sum
+    let targetPP
 
     try {
 
@@ -74,13 +76,13 @@ process.on('message', async (data) => {
         const params = parseCommandParameters(data.event.message);
 
         sug = await db.getSug(data.user.id);
-        let top100Set = await getTop100MultiMods(data.user.id, data.event.id);
-        let sum = computeCrossModeProgressionPotential(data.user.id, top100Set);
+        top100Set = await getTop100MultiMods(data.user.id, data.event.id);
+        sum = computeCrossModeProgressionPotential(data.user.id, top100Set);
         top100Set = top100Set.osu;
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.ids, sum);
         results = await findScoresByPPRange({ min, max }, params.mods, data);
         filtered = filterByMods(results, params.mods, params.allowOtherMods);
-        const targetPP = computeTargetPP(top100Set.tr, sum);
+        targetPP = computeTargetPP(top100Set.tr, sum);
         console.log(targetPP)
 
         filtered = filterOutTop100(filtered, top100Set.table);
@@ -127,7 +129,7 @@ process.on('message', async (data) => {
             await db.disconnect();
             process.exit(0);
         }
-        const beatmap = await getBeatmap(selected.beatmap_id);
+        beatmap = await getBeatmap(selected.beatmap_id);
         const elapsedTime = Date.now() - startTime;
         const responseMessage = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, elapsedTime);
         await performe.logDuration('BM', await t.stop('BM'))
@@ -149,13 +151,15 @@ process.on('message', async (data) => {
 
     } finally {
 
-        sortList = null;
-        filtered = null;
-        sug = null;
+        sortList = null
+        filtered = null
+        sug = null
         selected = null;
         beatmap = null;
         results = null;
         top100Set = null;
+        sum = null
+        targetPP = null
 
         process.removeAllListeners();
 

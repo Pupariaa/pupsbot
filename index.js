@@ -83,14 +83,10 @@ setInterval(() => {
     performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2))
     performe.logDuration('GCOL', gcSummary)
     getCPUUsagePercent().then(res => {
-        console.log(res)
         performe.logDuration('UCPU', res.userCPU)
         performe.logDuration('SCPU', res.systemCPU)
     });
 }, 1000);
-
-
-
 
 
 const lastRequests = {};
@@ -130,7 +126,7 @@ ircBot.onAction(async ({ target, message, nick }) => {
     const result = await calculatePPWithMods(beatmapId);
     if (result.error) {
         await queue.addToQueue(nick, result.error);
-        performe.logDuration('CMDNP', await t.stop('CMDNP'))
+        performe.logDuration('NP', await t.stop('NP'))
         return;
     }
     const summary = result.NoMod;
@@ -142,8 +138,8 @@ ircBot.onAction(async ({ target, message, nick }) => {
     };
 
     const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de détails' : '!mods for more details'}`;
-    performe.logCommand(user.id, 'CMDNP')
-    performe.logDuration('CMDNP', await t.stop('CMDNP'))
+    performe.logCommand(user.id, 'NP')
+    performe.logDuration('NP', await t.stop('NP'))
     await queue.addToQueue(nick, out);
 });
 

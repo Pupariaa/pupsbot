@@ -6,7 +6,7 @@ const CommandManager = require('./services/Commands');
 const Performe = require('./services/Performe');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const generateId = require('./utils/generateId');
-const { getUser } = require('./services/osuApi');
+const { getUser } = require('./services/OsuApiV1');
 const performe = new Performe();
 performe.init();
 

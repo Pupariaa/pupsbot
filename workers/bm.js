@@ -11,7 +11,7 @@ const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/mes
 const modsToBitwise = require('../utils/osu/modsToBitwise');
 const parseCommandParameters = require('../utils/parser/bmParser');
 
-const { getTop100MultiMods, getBeatmap } = require('../services/osuApi');
+const { getTop100MultiMods, getBeatmap } = require('../services/OsuApiV1');
 
 const Thread2Database = require('../services/SQL');
 

@@ -1,4 +1,4 @@
-const { getUser } = require('../services/osuApi');
+const { getUser } = require('../services/OsuApiV1');
 const fork = require('child_process').fork;
 const Performe = require('../services/Performe');
 module.exports = {

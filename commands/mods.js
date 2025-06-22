@@ -1,4 +1,4 @@
-const { getUser } = require('../services/osuApi');
+const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const Performe = require('../services/Performe');
 module.exports = {

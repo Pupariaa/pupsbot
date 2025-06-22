@@ -145,9 +145,7 @@ ircBot.onAction(async ({ target, message, nick }) => {
 
 ircBot.onMessage(async (event) => {
     if (event.target.toLowerCase() == process.env.IRC_USERNAME.toLowerCase()) {
-        const msg = event.message.trim();
-        if (!msg.startsWith('!')) return;
-        event.id = id = generateId();
+        if (!event.message.trim().startsWith('!')) return;
         await commandManager.handleMessage(event, queue, lastRequests);
     }
 });

@@ -1,5 +1,6 @@
 const path = require('path');
-const fs = require('fs')
+const fs = require('fs');
+const generateId = require('../utils/generateId');
 class CommandManager {
     constructor(commandsPath = path.join(__dirname, '..', 'commands')) {
         this.commands = new Map();
@@ -25,6 +26,7 @@ class CommandManager {
         const parts = content.slice(1).trim().split(' ');
         const commandName = parts[0].toLowerCase();
         const args = parts.slice(1);
+        event.id = generateId();
 
         const command = this.commands.get(commandName);
         if (!command) return;

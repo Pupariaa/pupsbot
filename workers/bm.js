@@ -57,7 +57,7 @@ process.on('message', async (data) => {
     await db.connect();
     const startTime = Date.now();
     const performe = new Performe();
-    performe.init();
+    await performe.init();
     const t = performe.startTimer();
 
     let sortList

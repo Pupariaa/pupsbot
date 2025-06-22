@@ -3,3 +3,4 @@ node_modules/
 .log
 .sql
 .redis
+osu_token.json

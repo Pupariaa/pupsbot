@@ -54,118 +54,89 @@ function pickBestRandomPrecision(filtered) {
 
 process.on('message', async (data) => {
     const db = new Thread2Database();
-    await db.connect();
-    const startTime = Date.now();
     const performe = new Performe();
-    await performe.init();
-    const t = performe.startTimer();
-
-    let sortList
-    let filtered
-    let sug
-    let selected = null;
-    let beatmap = null;
-    let results = null;
-    let top100Set = null;
-    let sum
-    let targetPP
 
     try {
+        await db.connect();
+        await performe.init();
+        const t = performe.startTimer();
+        const startTime = Date.now();
 
-        console.log(`[Worker] ${new Date().toLocaleString('fr-FR')} ${data.event.id} Starting processing...`);
         const params = parseCommandParameters(data.event.message);
+        const sug = await db.getSug(data.user.id);
+        const top100 = await getTop100MultiMods(data.user.id, data.event.id);
+        const sum = computeCrossModeProgressionPotential(data.user.id, top100);
+        const top100Osu = top100.osu;
 
-        sug = await db.getSug(data.user.id);
-        top100Set = await getTop100MultiMods(data.user.id, data.event.id);
-        sum = computeCrossModeProgressionPotential(data.user.id, top100Set);
-        top100Set = top100Set.osu;
-        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Set.tr, data.event.ids, sum);
-        results = await findScoresByPPRange({ min, max }, params.mods, data);
-        filtered = filterByMods(results, params.mods, params.allowOtherMods);
-        targetPP = computeTargetPP(top100Set.tr, sum);
-        console.log(targetPP)
+        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
+        const results = await findScoresByPPRange({ min, max }, params.mods, data);
+        const targetPP = computeTargetPP(top100Osu.tr, sum);
 
-        filtered = filterOutTop100(filtered, top100Set.table);
-        filtered = filtered
+        let filtered = filterByMods(results, params.mods, params.allowOtherMods);
+        filtered = filterOutTop100(filtered, top100Osu.table)
             .filter(score => score.precision < 8)
             .sort((a, b) => b.precision - a.precision);
 
-
         const now = Date.now();
-
-        sortList = [];
-        selected = null;
-
-
         const t2 = performe.startTimer();
-        for (let i = 0; i < filtered.length; i++) {
-            const score = filtered[i];
+        const sortList = [];
+
+        for (const score of filtered) {
             const mapId = parseInt(score.beatmap_id);
             const previous = sug.find(e => e.beatmap_id === mapId);
-
-            const isOld = previous && (now - new Date(previous.Date).getTime()) > 7 * 24 * 60 * 60 * 1000;
+            const isOld = previous && (now - new Date(previous.Date).getTime()) > 604800000;
             const isNotInList = !previous;
 
             if (isOld || isNotInList) {
-                if (targetPP) {
-                    const pp = parseFloat(score.pp);
-                    if (pp >= targetPP && pp <= targetPP + 28) {
-                        sortList.push(score);
-                        selected = score;
-                    }
-                } else {
+                if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
                     sortList.push(score);
-                    break;
                 }
             }
         }
-        selected = pickBestRandomPrecision(sortList);
-        await performe.logDuration('SORTBM', await t2.stop('SORTBM'))
+
+        const selected = pickBestRandomPrecision(sortList);
+        await performe.logDuration('SORTBM', await t2.stop('SORTBM'));
+
         if (!selected) {
-            const elapsedTime = Date.now() - startTime;
-            const message = SendNotFoundBeatmapMessage(data.user.country, elapsedTime);
-            process.send({ username: data.event.nick, response: message, uid: data.event.id });
-            await db.setHistory(data.event.id, data.event.message, message, data.user.id, data.event.nick, false, elapsedTime);
-            await db.disconnect();
-            process.exit(0);
+            const elapsed = Date.now() - startTime;
+            const msg = SendNotFoundBeatmapMessage(data.user.country, elapsed);
+            process.send({ username: data.event.nick, response: msg, uid: data.event.id });
+            await db.setHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
         }
-        beatmap = await getBeatmap(selected.beatmap_id);
-        const elapsedTime = Date.now() - startTime;
-        const responseMessage = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, elapsedTime);
-        await performe.logDuration('BM', await t.stop('BM'))
-        await performe.logCommand(data.user.id, 'BM')
+
+        const beatmap = await getBeatmap(selected.beatmap_id);
+        const elapsed = Date.now() - startTime;
+        const response = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, elapsed);
+
+        await performe.logDuration('BM', await t.stop('BM'));
+        await performe.logCommand(data.user.id, 'BM');
         await performe.close();
-        process.send({ username: data.event.nick, response: responseMessage, uid: data.event.id, beatmapId: selected.beatmap_id, userId: data.user.id });
+
+        process.send({
+            username: data.event.nick,
+            response,
+            uid: data.event.id,
+            beatmapId: selected.beatmap_id,
+            userId: data.user.id
+        });
+
         await db.setSug(data.user.id, selected.beatmap_id);
-        await db.setHistory(data.event.id, data.event.message, responseMessage, data.user.id, data.event.nick, true, elapsedTime, data.user.locale);
-        await db.disconnect();
+        await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
 
     } catch (e) {
-        await performe.logDuration('BM', await t.stop('BM'))
-        await performe.logCommand(data.user.id, 'BM')
-        await performe.close();
         console.error(e);
-        const elapsedTime = Date.now() - startTime;
-        await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsedTime);
-        await db.disconnect();
-
+        try {
+            const elapsed = Date.now() - Date.now();
+            await performe.logDuration('BM', 0);
+            await performe.logCommand(data.user.id, 'BM');
+            await performe.close();
+            await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsed);
+        } catch { }
     } finally {
-
-        sortList = null
-        filtered = null
-        sug = null
-        selected = null;
-        beatmap = null;
-        results = null;
-        top100Set = null;
-        sum = null
-        targetPP = null
-
-        process.removeAllListeners();
-
+        process.removeAllListeners('message');
+        try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();
-
-        setTimeout(() => process.exit(0), 50);
+        process.exit(0);
     }
-
 });

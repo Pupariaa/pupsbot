@@ -123,7 +123,7 @@ process.on('message', async (data) => {
 
         await db.setSug(data.user.id, selected.beatmap_id);
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
-
+        await performe.markResolved(data.event.id);
     } catch (e) {
         console.error(e);
         try {
@@ -135,7 +135,7 @@ process.on('message', async (data) => {
         } catch { }
     } finally {
         console.log(data.event.id)
-        await performe.markResolved(data.event.id);
+
         await performe.close();
         process.removeAllListeners('message');
         try { await db.disconnect(); } catch { }

@@ -73,6 +73,13 @@ class Performe {
         await this._redis.zRem('unresolved:pending', id.toString());
     }
 
+    async markCancelled(id) {
+        await this._ensureReady();
+        await this._redis.del(`pending:${id}`);
+        await this._redis.zRem('unresolved:pending', id.toString());
+        await this._redis.zAdd('cancelled:pending', [{ score: Date.now(), value: id.toString() }]);
+    }
+
     async _ensureReady() {
         if (!this._connected) {
             await this.init();

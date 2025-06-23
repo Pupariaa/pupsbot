@@ -111,7 +111,7 @@ process.on('message', async (data) => {
 
         await performe.logDuration('BM', await t.stop('BM'));
         await performe.logCommand(data.user.id, 'BM');
-        await performe.close();
+
 
         process.send({
             username: data.event.nick,
@@ -134,9 +134,13 @@ process.on('message', async (data) => {
             await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsed);
         } catch { }
     } finally {
+        console.log(data.event.id)
+        await performe.markResolved(data.event.id);
+        await performe.close();
         process.removeAllListeners('message');
         try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();
         process.exit(0);
+
     }
 });

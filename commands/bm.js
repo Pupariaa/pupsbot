@@ -13,7 +13,6 @@ module.exports = {
             child.on('message', async (msgFromWorker) => {
                 if (msgFromWorker && msgFromWorker.username && msgFromWorker.response) {
                     await queue.addToQueue(msgFromWorker.username, msgFromWorker.response);
-                    await performe.markResolved(msgFromWorker.uid);
                 }
             })
         } catch (e) {

@@ -1,12 +1,10 @@
 const { formatTime } = require('./functions');
 const osu_utils = require('osu-utils');
 const osuUtils = new osu_utils();
-const specsModifier = require('./osu/specsModifier');
-const durationModifier = require('./osu/duationModifier');
 
 function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP) {
-    const { ar, cs, od, hp } = specsModifier(selected.mods, selected);
-    const duration = formatTime(durationModifier(parseInt(selected.length), selected.mods));
+    const { cs, od, hp, ar, bpm, length } = osuUtils.ConvertStatsWithMods({ cs: selected.cs, od: selected.od, hp: selected.hp, ar: selected.ar, bpm: selected.bpm, length: selected.length }, 'osu', selected.mods);
+    const duration = formatTime(length);
     const linkScore = `[https://osu.ppy.sh/scores/osu/${selected.scoreId} ${locale === 'FR' ? 'ce score' : 'that score'}]`;
     const linkBeatmap = `[https://osu.ppy.sh/b/${selected.beatmap_id} ${selected.title} - ${selected.artist}]`;
     const ppText = `${parseFloat(selected.pp).toFixed(0)} PP`;

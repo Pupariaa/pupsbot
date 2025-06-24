@@ -35,9 +35,8 @@ module.exports = {
             - Add Star Rating
             - Addition of the "NM" mode to have exclusively maps no mods
             `
-        await queue.addToQueue(event.nick, responseMessage);
+        await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
         await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         await db.disconnect();
-        await performe.markResolved(event.id);
     }
 };

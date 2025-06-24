@@ -33,9 +33,9 @@ module.exports = {
             const line = acc.map(a => (r[mod]?.[a] || '-').padStart(5)).join(' ');
             responseMessage += mod.padEnd(6) + line + '\n';
         }
-        await queue.addToQueue(event.nick, responseMessage.trim(), true);
-        await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+        await queue.addToQueue(event.nick, responseMessage.trim(), true, u.id, true);
+        await db.setHistory(event.id, event.message, responseMessage, event.id, event.nick, true, 0, u.locale);
         await db.disconnect();
-        await performe.markResolved(event.id);
+
     }
 };

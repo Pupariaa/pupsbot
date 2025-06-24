@@ -45,7 +45,7 @@ class IRCQueueManager {
 
                 this._queue = this._queue.filter(t => t.target !== target);
                 this._blockedUsers.set(target, now + 30000);
-
+                Logger.taskRejected(`Spam detected for ${target}. Blocking for 30s.`);
                 await this._sendFunction(
                     target,
                     `⛔ Please stop spamming... Your behavior causes delays for others... :(  You have been blocked for 30 seconds.`
@@ -110,6 +110,7 @@ class IRCQueueManager {
                 task.retriesLeft--;
                 this._queue.push(task);
             } else {
+                Logger.taskError(`Failed to send message to ${task.target}: ${err.message}`);
                 task.reject(err);
             }
         } finally {

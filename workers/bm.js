@@ -14,8 +14,9 @@ const parseCommandParameters = require('../utils/parser/bmParser');
 const { getTop100MultiMods, getBeatmap } = require('../services/OsuApiV1');
 
 const Thread2Database = require('../services/SQL');
+const Logger = require('../utils/Logger');
 
-
+let GlobalData = null;
 
 function filterOutTop100(results, beatmapIdSet) {
     return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
@@ -53,6 +54,10 @@ function pickBestRandomPrecision(filtered) {
 }
 
 process.on('message', async (data) => {
+    GlobalData = data;
+
+
+
     const db = new Thread2Database();
     const performe = new Performe();
 
@@ -125,7 +130,7 @@ process.on('message', async (data) => {
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
 
     } catch (e) {
-        console.error(e);
+        Logger.errorCatch('Bm Worker', e);
         try {
             const response = SendNotFoundBeatmapMessage(data.user.country, 0);
             const elapsed = Date.now() - Date.now();
@@ -136,12 +141,14 @@ process.on('message', async (data) => {
                 username: data.event.nick,
                 response,
                 id: data.event.id,
-                beatmapId: selected.beatmap_id,
+                beatmapId: null,
                 userId: data.user.id,
                 success: false
             });
             await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsed);
-        } catch { }
+        } catch (err) {
+            Logger.errorCatch('Bm Worker', err);
+        }
     } finally {
         await performe.close();
         process.removeAllListeners('message');

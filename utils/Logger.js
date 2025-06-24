@@ -38,6 +38,11 @@ class Logger {
     static taskError(message) {
         this._log('\x1b[31m', 'Task Error', message);
     }
+    static errorCatch(context, error) {
+        const timestamp = this._now?.() || new Date().toISOString();
+        const message = error?.stack || error?.message || String(error);
+        console.error(`\x1b[31m[${timestamp}] [Error] [${context}] ${message}\x1b[0m`);
+    }
 }
 
 module.exports = Logger;

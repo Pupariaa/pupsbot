@@ -116,26 +116,33 @@ process.on('message', async (data) => {
         process.send({
             username: data.event.nick,
             response,
-            uid: data.event.id,
+            id: data.event.id,
             beatmapId: selected.beatmap_id,
             userId: data.user.id
         });
 
         await db.setSug(data.user.id, selected.beatmap_id);
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
-        await performe.markResolved(data.event.id);
+
     } catch (e) {
         console.error(e);
         try {
+            const response = SendNotFoundBeatmapMessage(data.user.country, 0);
             const elapsed = Date.now() - Date.now();
             await performe.logDuration('BM', 0);
             await performe.logCommand(data.user.id, 'BM');
             await performe.close();
+            process.send({
+                username: data.event.nick,
+                response,
+                id: data.event.id,
+                beatmapId: selected.beatmap_id,
+                userId: data.user.id,
+                success: false
+            });
             await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsed);
         } catch { }
     } finally {
-        console.log(data.event.id)
-
         await performe.close();
         process.removeAllListeners('message');
         try { await db.disconnect(); } catch { }

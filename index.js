@@ -7,6 +7,7 @@ const Performe = require('./services/Performe');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const { getUser } = require('./services/OsuApiV1');
 const Logger = require('./utils/Logger');
+const generateId = require('./utils/generateId');
 
 const performe = new Performe();
 performe.init();
@@ -129,13 +130,15 @@ ircBot?.onAction(async ({ target, message, nick }) => {
 
         const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
         if (!beatmapId) return;
+        const id = generateId()
+        Logger.task(`Create: /np → ${id}`);
 
         const user = await getUser(nick);
         const isFR = user.locale === 'FR';
         const result = await calculatePPWithMods(beatmapId);
 
         if (result.error) {
-            await queue.addToQueue(nick, result.error);
+            await queue.addToQueue(nick, result.error, false, id, false);
             performe.logDuration('NP', await t.stop('NP'));
             return;
         }
@@ -152,8 +155,9 @@ ircBot?.onAction(async ({ target, message, nick }) => {
 
         performe.logCommand(user.id, 'NP');
         performe.logDuration('NP', await t.stop('NP'));
-        await queue.addToQueue(nick, out);
+        await queue.addToQueue(nick, out, false, id, true);
     } catch (err) {
+        await queue.addToQueue(nick, 'An error occurred while executing the /np command.', false, id, false);
         Logger.errorCatch('onAction', err);
     }
 });

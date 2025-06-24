@@ -36,7 +36,6 @@ class IRCQueueManager {
                 if (id && success === false) {
                     await this._performe.markCancelled(id);
                 }
-                return;
             }
 
             const alreadyQueued = this._queue.filter(t => t.target === target).length;
@@ -110,7 +109,7 @@ class IRCQueueManager {
                 task.retriesLeft--;
                 this._queue.push(task);
             } else {
-                Logger.taskError(`Failed to send message to ${task.target}: ${err.message}`);
+                Logger.taskError(`Failed to send message to ${task.target}: ${err.message}`, true);
                 task.reject(err);
             }
         } finally {

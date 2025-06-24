@@ -1,10 +1,12 @@
 const axios = require('axios');
 const Performe = require('./Performe');
+const Logger = require('../utils/Logger');
 
 async function getUser(username, id) {
 
     if (!process.env.OSU_API_KEY) {
-        throw new Error(`${new Date().toLocaleString('fr-FR')} ${id} Missing OSU_API_KEY in environment variables.`);
+        Logger.errorCatch('OsuApiV1', 'Missing OSU_API_KEY in environment variables.');
+        return null;
     }
     const performe = new Performe();
     await performe.init();
@@ -21,7 +23,8 @@ async function getUser(username, id) {
 }
 async function getTop100MultiMods(userId, id) {
     if (!process.env.OSU_API_KEY) {
-        throw new Error(`${new Date().toLocaleString('fr-FR')} ${id} Missing OSU_API_KEY in environment variables.`);
+        Logger.errorCatch('OsuApiV1', 'Missing OSU_API_KEY in environment variables.');
+        return null;
     }
 
     const modes = ['0', '1', '2', '3'];
@@ -104,7 +107,8 @@ async function getTop100MultiMods(userId, id) {
 
 async function getBeatmap(bid) {
     if (!process.env.OSU_API_KEY) {
-        throw new Error(`${new Date().toLocaleString('fr-FR')} Missing OSU_API_KEY in environment variables.`);
+        Logger.errorCatch('OsuApiV1', 'Missing OSU_API_KEY in environment variables.');
+        return null;
     }
     const performe = new Performe();
     await performe.init();

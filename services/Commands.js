@@ -36,12 +36,13 @@ class CommandManager {
 
         const command = this.commands.get(commandName);
         if (!command) return;
+        Logger.task(`Create: !${commandName} → ${event.id}`);
 
         try {
             await command.execute(event, args, queue, lastRequests);
         } catch (error) {
             Logger.errorCatch(`CommandManager::${commandName}`, error);
-            await queue.addToQueue(event.nick, "An error occurred while executing the command.", true, id, false);
+            await queue.addToQueue(event.nick, "An error occurred while executing the command.", true, event.id, false);
         }
     }
 }

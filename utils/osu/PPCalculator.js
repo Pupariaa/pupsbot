@@ -18,7 +18,6 @@ async function calculatePPWithMods(beatmapId) {
 
     const beatmapData = await fetchBeatmapData(beatmapId);
     const mode = await extractOsuMode(beatmapData);
-    console.log(mode)
     if (mode !== 0) {
         return { error: 'Only Standard mode is supported.' };
     }

@@ -1,21 +1,34 @@
 const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const Performe = require('../services/Performe');
+const Logger = require('../utils/Logger');
+
 module.exports = {
     name: 'help',
     async execute(event, args, queue) {
         const performe = new Performe();
-        await performe.markPending(event.id);
         const db = new Thread2Database();
-        await db.connect();
-        let u = await getUser(event.nick)
-        const responseMessage = u.locale === 'FR'
-            ? `Commandes disponibles: !bm [Donne une beatmap non jouée (ou jouée il y a longtemps / pas dans ton top rank) mais jouée par quelqu'un de ton rang] <mods> (ex: HDHR ou nm pour uniquement des maps sans mods) | !info [Informations du bot] /np [Donne les pp gains de la map ranked envoyée] | !help [Aide] | !support [Supporter le projet] | !release [Informations sur la mise à jour]`
-            : `Orders available: !bm [Give a beatmap not played (or played a long time ago / not in your top rank) but played by someone your rank] <mods> (e.g. HDHR or nm to get only no-mod maps) | !info [Bot information] /np [Give the pp earnings of the ranked map sent] | !help [Help] | !support [Support the project] | !release [Update information]`;
 
+        try {
+            await performe.markPending(event.id);
+            await db.connect();
 
-        await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-        await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
-        await db.disconnect();
+            const u = await getUser(event.nick);
+            const responseMessage = u.locale === 'FR'
+                ? `Commandes disponibles: !bm [Donne une beatmap non jouée (ou jouée il y a longtemps / pas dans ton top rank) mais jouée par quelqu'un de ton rang] <mods> (ex: HDHR ou nm pour uniquement des maps sans mods) | !info [Informations du bot] /np [Donne les pp gains de la map ranked envoyée] | !help [Aide] | !support [Supporter le projet] | !release [Informations sur la mise à jour]`
+                : `Orders available: !bm [Give a beatmap not played (or played a long time ago / not in your top rank) but played by someone your rank] <mods> (e.g. HDHR or nm to get only no-mod maps) | !info [Bot information] /np [Give the pp earnings of the ranked map sent] | !help [Help] | !support [Support the project] | !release [Update information]`;
+
+            await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
+            await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+        } catch (err) {
+            Logger.errorCatch('Command::help', err);
+            await queue.addToQueue(event.nick, "An error occurred while executing the help command.", false, event.id, false);
+        } finally {
+            try {
+                await db.disconnect();
+            } catch (e) {
+                Logger.errorCatch('Command::help::disconnect', e);
+            }
+        }
     }
 };

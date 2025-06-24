@@ -1,22 +1,33 @@
 const { getUser } = require('../services/OsuApiV1');
 const fork = require('child_process').fork;
 const Performe = require('../services/Performe');
+const Logger = require('../utils/Logger');
+
 module.exports = {
     name: 'bm',
     async execute(event, args, queue) {
         const performe = new Performe();
-        await performe.markPending(event.id);
-        child = fork((__dirname, '..', 'workers/bm.js'));
-        let user = await getUser(event.nick);
         try {
+            await performe.markPending(event.id);
+            const child = fork((__dirname, '..', 'workers/bm.js'));
+            const user = await getUser(event.nick);
+
             child.send({ event, user });
+
             child.on('message', async (msgFromWorker) => {
                 if (msgFromWorker && msgFromWorker.username && msgFromWorker.response) {
-                    await queue.addToQueue(msgFromWorker.username, msgFromWorker.response, false, msgFromWorker.id, success = msgFromWorker.success);
+                    await queue.addToQueue(
+                        msgFromWorker.username,
+                        msgFromWorker.response,
+                        false,
+                        msgFromWorker.id,
+                        msgFromWorker.success
+                    );
                 }
-            })
+            });
         } catch (e) {
-            console.error(e)
+            Logger.errorCatch('bm', e);
+            await queue.addToQueue(event.nick, "An error occurred while executing the bm command.", false, event.id, false);
         }
     }
 };

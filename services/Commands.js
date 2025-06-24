@@ -1,6 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const generateId = require('../utils/generateId');
+const Logger = require('../utils/Logger');
+
 class CommandManager {
     constructor(commandsPath = path.join(__dirname, '..', 'commands')) {
         this.commands = new Map();
@@ -8,15 +10,19 @@ class CommandManager {
     }
 
     _loadAll(directory) {
-        const files = fs.readdirSync(directory).filter(file => file.endsWith('.js'));
+        try {
+            const files = fs.readdirSync(directory).filter(file => file.endsWith('.js'));
 
-        for (const file of files) {
-            const filePath = path.join(directory, file);
-            const command = require(filePath);
+            for (const file of files) {
+                const filePath = path.join(directory, file);
+                const command = require(filePath);
 
-            if (command.name && typeof command.execute === 'function') {
-                this.commands.set(command.name.toLowerCase(), command);
+                if (command.name && typeof command.execute === 'function') {
+                    this.commands.set(command.name.toLowerCase(), command);
+                }
             }
+        } catch (err) {
+            Logger.errorCatch('CommandManager::_loadAll', err);
         }
     }
 
@@ -34,9 +40,10 @@ class CommandManager {
         try {
             await command.execute(event, args, queue, lastRequests);
         } catch (error) {
-            console.error(`${new Date().toLocaleString('fr-FR')} ${event.id} [Command Error] ${commandName}:`, error);
-            await queue.addToQueue(event.nick, "An error occurred while executing the command.");
+            Logger.errorCatch(`CommandManager::${commandName}`, error);
+            await queue.addToQueue(event.nick, "An error occurred while executing the command.", true, id, false);
         }
     }
 }
+
 module.exports = CommandManager;

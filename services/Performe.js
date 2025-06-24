@@ -83,8 +83,9 @@ class Performe {
         await this._redis.zRem('unresolved:pending', id.toString());
     }
 
-    async markCancelled(id) {
-        Logger.taskRejected(`Cancelled ${id}`);
+    async markCancelled(id, error = false) {
+        Logger.taskError(`${id}`);
+        error ? Logger.taskError(id) : Logger.taskRejected(id);
         await this._ensureReady();
         await this._redis.del(`pending:${id}`);
         await this._redis.zRem('unresolved:pending', id.toString());

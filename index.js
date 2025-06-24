@@ -6,9 +6,10 @@ const CommandManager = require('./services/Commands');
 const Performe = require('./services/Performe');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const { getUser } = require('./services/OsuApiV1');
+const Logger = require('./utils/Logger');
+
 const performe = new Performe();
 performe.init();
-
 
 const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
 
@@ -55,106 +56,123 @@ async function getCPUUsagePercent(durationMs = 100) {
 }
 
 setInterval(() => {
-    const mem = process.memoryUsage();
-    const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
-    const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
-    const externalMB = (mem.external / 1024 / 1024).toFixed(2);
+    try {
+        const mem = process.memoryUsage();
+        const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
+        const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
+        const externalMB = (mem.external / 1024 / 1024).toFixed(2);
 
-    const res = process.resourceUsage();
-    const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
+        const res = process.resourceUsage();
+        const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
 
-    const lagMean = loopDelay.mean / 1e6;
-    const lagMax = loopDelay.max / 1e6;
-    const lagStddev = loopDelay.stddev / 1e6;
+        const lagMean = loopDelay.mean / 1e6;
+        const lagMax = loopDelay.max / 1e6;
+        const lagStddev = loopDelay.stddev / 1e6;
 
-    const recentGCs = gcLog.splice(0, gcLog.length);
-    const gcSummary = recentGCs.length
-        ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
-        : 'none';
+        const recentGCs = gcLog.splice(0, gcLog.length);
+        const gcSummary = recentGCs.length
+            ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
+            : 'none';
 
-    performe.logDuration('HEAP', heapUsedMB)
-    performe.logDuration('RSS', rssMB)
-    performe.logDuration('HEAPEXT', externalMB)
+        performe.logDuration('HEAP', heapUsedMB);
+        performe.logDuration('RSS', rssMB);
+        performe.logDuration('HEAPEXT', externalMB);
+        performe.logDuration('MRSS', maxRSSMB);
+        performe.logDuration('ELOOPLMEN', lagMean.toFixed(2));
+        performe.logDuration('ELOOPLMAX', lagMax.toFixed(2));
+        performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2));
+        performe.logDuration('GCOL', gcSummary);
 
-    performe.logDuration('MRSS', maxRSSMB)
-    performe.logDuration('ELOOPLMEN', lagMean.toFixed(2))
-    performe.logDuration('ELOOPLMAX', lagMax.toFixed(2))
-    performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2))
-    performe.logDuration('GCOL', gcSummary)
-    getCPUUsagePercent().then(res => {
-        performe.logDuration('UCPU', res.userCPU)
-        performe.logDuration('SCPU', res.systemCPU)
-    });
+        getCPUUsagePercent().then(res => {
+            performe.logDuration('UCPU', res.userCPU);
+            performe.logDuration('SCPU', res.systemCPU);
+        });
+    } catch (err) {
+        Logger.errorCatch('MonitorInterval', err);
+    }
 }, 1000);
 
-
 const lastRequests = {};
-const ircBot = new OsuIRCClient({
-    username: process.env.IRC_USERNAME,
-    password: process.env.IRC_PASSWORD,
-    channel: "#osu"
-});
+let ircBot, queue, commandManager;
 
-const queue = new IRCQueueManager(
-    (target, message) => ircBot.sendMessage(message, target),
-    {
-        maxConcurrent: 4,
-        ratePerSecond: 4,
-        maxRetries: 2,
-        enableLogs: true
-    }
-);
+try {
+    ircBot = new OsuIRCClient({
+        username: process.env.IRC_USERNAME,
+        password: process.env.IRC_PASSWORD,
+        channel: "#osu"
+    });
+
+    queue = new IRCQueueManager(
+        (target, message) => ircBot.sendMessage(message, target),
+        {
+            maxConcurrent: 4,
+            ratePerSecond: 4,
+            maxRetries: 2,
+            enableLogs: true
+        }
+    );
+
+    commandManager = new CommandManager();
+    ircBot.connect();
+} catch (err) {
+    Logger.errorCatch('Startup', err);
+}
 
 setInterval(() => {
-    performe.heartbeat().catch(() => { });
+    performe.heartbeat().catch(err => Logger.errorCatch('Heartbeat', err));
 }, 10);
 
-const commandManager = new CommandManager();
-ircBot.connect();
-
-
-ircBot.onAction(async ({ target, message, nick }) => {
+ircBot?.onAction(async ({ target, message, nick }) => {
     const t = performe.startTimer();
-    if (target !== process.env.IRC_USERNAME) return;
+    try {
+        if (target !== process.env.IRC_USERNAME) return;
 
-    const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
-    if (!beatmapId) return;
+        const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
+        if (!beatmapId) return;
 
-    const user = await getUser(nick);
-    const isFR = user.locale === 'FR';
-    const result = await calculatePPWithMods(beatmapId);
-    if (result.error) {
-        await queue.addToQueue(nick, result.error);
-        performe.logDuration('NP', await t.stop('NP'))
-        return;
+        const user = await getUser(nick);
+        const isFR = user.locale === 'FR';
+        const result = await calculatePPWithMods(beatmapId);
+
+        if (result.error) {
+            await queue.addToQueue(nick, result.error);
+            performe.logDuration('NP', await t.stop('NP'));
+            return;
+        }
+
+        const summary = result.NoMod;
+
+        lastRequests[nick] = {
+            beatmapId,
+            timestamp: Date.now(),
+            results: result
+        };
+
+        const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de d\u00e9tails' : '!mods for more details'}`;
+
+        performe.logCommand(user.id, 'NP');
+        performe.logDuration('NP', await t.stop('NP'));
+        await queue.addToQueue(nick, out);
+    } catch (err) {
+        Logger.errorCatch('onAction', err);
     }
-    const summary = result.NoMod;
-
-    lastRequests[nick] = {
-        beatmapId,
-        timestamp: Date.now(),
-        results: result
-    };
-
-    const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de détails' : '!mods for more details'}`;
-    performe.logCommand(user.id, 'NP')
-    performe.logDuration('NP', await t.stop('NP'))
-    await queue.addToQueue(nick, out);
 });
 
-ircBot.onMessage(async (event) => {
-    if (event.target.toLowerCase() == process.env.IRC_USERNAME.toLowerCase()) {
-        if (!event.message.trim().startsWith('!')) return;
-        await commandManager.handleMessage(event, queue, lastRequests);
+ircBot?.onMessage(async (event) => {
+    try {
+        if (event.target.toLowerCase() === process.env.IRC_USERNAME.toLowerCase()) {
+            if (!event.message.trim().startsWith('!')) return;
+            await commandManager.handleMessage(event, queue, lastRequests);
+        }
+    } catch (err) {
+        Logger.errorCatch('onMessage', err);
     }
 });
-
 
 process.on('uncaughtException', (err) => {
-    console.error(err)
+    Logger.errorCatch('uncaughtException', err);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error(reason);
-    console.error(promise);
+    Logger.errorCatch('unhandledRejection', reason);
 });

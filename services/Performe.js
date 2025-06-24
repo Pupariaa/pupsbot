@@ -1,4 +1,5 @@
 const RedisManager = require('./Redis');
+const Logger = require('../utils/Logger');
 
 class Performe {
     constructor() {
@@ -67,13 +68,23 @@ class Performe {
         await this._redis.zAdd('unresolved:pending', [{ score: timestamp, value: id.toString() }]);
     }
 
+    async markPending(id, ttl = 30) {
+        Logger.task(`Pending ${id}`);
+        await this._ensureReady();
+        const timestamp = Date.now();
+        await this._redis.set(`pending:${id}`, '1', { EX: ttl });
+        await this._redis.zAdd('unresolved:pending', [{ score: timestamp, value: id.toString() }]);
+    }
+
     async markResolved(id) {
+        Logger.task(`Resolved ${id}`);
         await this._ensureReady();
         await this._redis.del(`pending:${id}`);
         await this._redis.zRem('unresolved:pending', id.toString());
     }
 
     async markCancelled(id) {
+        Logger.taskRejected(`Cancelled ${id}`);
         await this._ensureReady();
         await this._redis.del(`pending:${id}`);
         await this._redis.zRem('unresolved:pending', id.toString());

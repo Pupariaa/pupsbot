@@ -1,6 +1,8 @@
 const { Sequelize } = require('sequelize');
 const SuggestedBeatmapModel = require('../models/SuggestedBeatmap');
 const CommandHistoryModel = require('../models/CommandHistory');
+const FeedBackModel = require('../models/FeedBack');
+const Logger = require('../utils/Logger');
 
 class Thread2Database {
     constructor() {
@@ -24,9 +26,8 @@ class Thread2Database {
         try {
             await this.sequelize.authenticate();
             this._connected = true;
-            console.log(`${new Date().toLocaleString('fr-FR')} [DB:Thread2] Connected successfully.`);
         } catch (err) {
-            console.error(`${new Date().toLocaleString('fr-FR')} [DB:Thread2 Connection failed:`, err);
+            Logger.errorCatch('SQL', err);
             throw err;
         }
     }
@@ -37,9 +38,10 @@ class Thread2Database {
         try {
             await this.sequelize.close();
             this._connected = false;
-            console.log(`${new Date().toLocaleString('fr-FR')} [DB:Thread2] Disconnected.`);
         } catch (err) {
-            console.error(`${new Date().toLocaleString('fr-FR')} [DB:Thread2 Error during disconnect:`, err);
+            Logger.errorCatch('SQL', err);
+            throw err;
+
         }
     }
 
@@ -73,13 +75,26 @@ class Thread2Database {
             locale: locale
         });
     }
+    async saveFeedBack(command_id, result, user_id, username, locale) {
+        const FeedBack = FeedBackModel(this.sequelize);
+        try {
+            await FeedBack.upsert({
+                user_id: user_id,
+                username: username,
+                Date: new Date(),
+                response: result,
+                locale: locale
+            });
+        } catch (e) {
+            console.error(e)
+        }
 
-
-
+    }
 
     get instance() {
         if (!this._connected) {
-            throw new Error(`${new Date().toLocaleString('fr-FR')} [DB:Thread2] Database is not connected. Call connect() first.`);
+            Logger.error('Database is not connected. Call connect() first.');
+            return null;
         }
         return this.sequelize;
     }

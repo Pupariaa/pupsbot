@@ -112,7 +112,7 @@ process.on('message', async (data) => {
 
         const beatmap = await getBeatmap(selected.beatmap_id);
         const elapsed = Date.now() - startTime;
-        const response = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, elapsed);
+        const response = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
 
         await performe.logDuration('BM', await t.stop('BM'));
         await performe.logCommand(data.user.id, 'BM');

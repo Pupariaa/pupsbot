@@ -1,4 +1,5 @@
 const { createClient } = require('redis');
+const Logger = require('../utils/Logger');
 
 class RedisManager {
     constructor() {
@@ -15,17 +16,13 @@ class RedisManager {
     }
 
     _setupEvents() {
-        this.client.on('connect', () => {
-            console.log('[Redis] Connected.');
-        });
+        this.client.on('connect', () => { });
 
         this.client.on('error', (err) => {
-            console.error('[Redis] Error:', err);
+            Logger.errorCatch('Redis', err);
         });
 
-        this.client.on('end', () => {
-            console.log('[Redis] Connection closed.');
-        });
+        this.client.on('end', () => { });
     }
 
     async connect() {
@@ -44,7 +41,8 @@ class RedisManager {
 
     get instance() {
         if (!this._connected) {
-            throw new Error('Redis client not connected. Call connect() first.');
+            Logger.error('Redis client not connected. Call connect() first.');
+            return null;
         }
         return this.client;
     }

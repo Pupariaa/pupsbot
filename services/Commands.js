@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const generateId = require('../utils/generateId');
 const Logger = require('../utils/Logger');
+const { getUser } = require('../services/OsuApiV1');
 
 class CommandManager {
     constructor(commandsPath = path.join(__dirname, '..', 'commands')) {
@@ -35,7 +36,12 @@ class CommandManager {
         event.id = generateId();
 
         const command = this.commands.get(commandName);
-        if (!command) return;
+        if (!command) {
+            let u = await getUser(event.nick);
+            await queue.addToQueue(event.nick, u.locale === 'FR' ? `Commande inconnue: !${commandName}. Fait !help pour connaitre les commandes` : `Unknown command: !${commandName}. Do !help to know the commands`, true, event.id, true);
+            return;
+
+        };
         Logger.task(`Create: !${commandName} → ${event.id}`);
 
         try {

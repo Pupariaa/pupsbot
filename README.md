@@ -13,7 +13,7 @@ You can join the Discord server to stay informed about future updates, give feed
 
 ---
 <p align="center">
-  <img src="https://techalchemy.fr/pupsbot/pngStats/status.png?t=482724247240" alt="Pupsbot Live Stats">
+  <img src="https://techalchemy.fr/pupsbot/pngStats/status.svg" alt="Pupsbot Live Stats">
 </p>
 <p align="center">
 <a href="https://techalchemy.fr/pupsbot/pngStats/stats.html">Go to Live statistics</a>

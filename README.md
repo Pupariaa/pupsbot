@@ -12,6 +12,10 @@ You can join the Discord server to stay informed about future updates, give feed
 </p>
 
 ---
+<p align="center">
+  <img src="https://techalchemy.fr/pupsbot/pngStats/status.png" alt="Pupsbot Live Stats">
+</p>
+---
 
 ## Overview
 

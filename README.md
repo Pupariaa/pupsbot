@@ -6,7 +6,7 @@ Pupsbot is an osu! recommendation bot designed to help players find fresh, high-
 You can join the Discord server to stay informed about future updates, give feedback, or report bugs.
 
 <p align="center">
-  <a href="https://discord.gg/QzZGf7jz6f">
+  <a href="https://discord.gg/bJQVPzy2u6">
     <img src="https://techalchemy.fr/bannerdiscord.png" alt="Join our Discord">
   </a>
 </p>

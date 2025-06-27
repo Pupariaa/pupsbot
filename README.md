@@ -99,6 +99,14 @@ Shows a short guide of all available commands and how to use them.
 
 Returns the link to support the project and help cover server and maintenance costs.
 
+### `!fb`
+
+Send your feedback !
+
+### `!teams`
+
+Join the official Pupsbot team.
+
 ---
 
 ## Technical Overview

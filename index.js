@@ -8,8 +8,10 @@ const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const { getUser, hasUserPlayedMap } = require('./services/OsuApiV1');
 const Logger = require('./utils/Logger');
 const generateId = require('./utils/generateId');
+const SQL = require('./services/SQL');
 
 const performe = new Performe();
+const db = new SQL();
 performe.init();
 global.temp = [];
 const trackers = [];
@@ -113,7 +115,28 @@ async function refreshTrackers(performe) {
             const index = trackers.findIndex(t => t.key === key);
 
             if (played || (trackers[index]?.retries ?? 0) >= 1) {
+                if (played) {
+                    const twentyMinAgo = Date.now() - 20 * 60 * 1000;
+                    const scoreDate = new Date(played.date).getTime();
+
+                    if (scoreDate >= twentyMinAgo && scoreDate <= Date.now()) {
+                        await db.updateSug(id, played.pp);
+                        Logger.trackSuccess(`Score detected in time range → Saved PP:${played.pp} for ID:${id}`);
+                    } else {
+                        Logger.track(`Score detected but outside time window (ID:${id})`);
+                        trackers.push({
+                            key,
+                            uid,
+                            bmid,
+                            duration: 10 * 60 * 1000,
+                            start: Date.now(),
+                            retries: 1,
+                            action
+                        });
+                    }
+                }
                 if (index !== -1) trackers.splice(index, 1);
+
                 Logger.trackSuccess(`Score detected or no retries → Delete ID:${id}`);
             } else {
                 if (index !== -1) trackers.splice(index, 1);

@@ -23,6 +23,17 @@ module.exports = {
                         msgFromWorker.id,
                         msgFromWorker.success
                     );
+                    if (!global.temp.includes(msgFromWorker.username) && process.env.SUGGEST_FEEDBACK === 'true') {
+
+                        const responseMessage = user.locale === 'FR'
+                            ? `Si tu le souhaite, je t'invite à donner ton retour constructif de Pupsbot ! Fait simplement !fb <retour>. Merci d'avance ♥`
+                            : `If you wish, I invite you to give constructive feedback on Pupsbot! Simply !fb <feedback>. Thanks in advance ♥`;
+
+                        await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
+                        global.temp.push(msgFromWorker.username);
+
+                    }
+                    child.kill();
                 }
             });
         } catch (e) {

@@ -34,9 +34,14 @@ class Logger {
     static taskRejected(message) {
         this._log('\x1b[33m', 'Task Rejected', message);
     }
-
     static taskError(message) {
         this._log('\x1b[31m', 'Task Error', message);
+    }
+    static track(message) {
+        this._log('\x1b[33m', 'Tracker', message);
+    }
+    static trackSuccess(message) {
+        this._log('\x1b[32m', 'Tracker', message);
     }
     static errorCatch(context, error) {
         const timestamp = this._now?.() || new Date().toISOString();

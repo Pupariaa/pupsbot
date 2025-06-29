@@ -116,6 +116,7 @@ process.on('message', async (data) => {
 
         await performe.logDuration('BM', await t.stop('BM'));
         await performe.logCommand(data.user.id, 'BM');
+        await performe.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
 
 
         process.send({
@@ -123,10 +124,10 @@ process.on('message', async (data) => {
             response,
             id: data.event.id,
             beatmapId: selected.beatmap_id,
-            userId: data.user.id
+            userId: data.user.id,
         });
 
-        await db.setSug(data.user.id, selected.beatmap_id);
+        await db.setSug(data.user.id, selected.beatmap_id, data.event.id, selected.pp);
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
 
     } catch (e) {

@@ -91,7 +91,37 @@ class Performe {
         await this._redis.zRem('unresolved:pending', id.toString());
         await this._redis.zAdd('cancelled:pending', [{ score: Date.now(), value: id.toString() }]);
     }
+    async trackSuggestedBeatmap(bmid, uid, length, id) {
+        await this._redis.hSet(`track:${id}`, {
+            bmid,
+            uid,
+            length
+        });
+        await this._redis.expire(`track:${id}`, 86400);
+        await this._redis.zAdd('trackers', [{ score: Date.now(), value: id }]);
+    }
 
+    async getAllTrackedSuggestions() {
+        const now = Date.now();
+        const results = [];
+
+        const entries = await this._redis.zRangeByScore('trackers', 0, now);
+
+        for (const id of entries) {
+            const data = await this._redis.hGetAll(`track:${id}`);
+            if (!data || !data.bmid || !data.uid || !data.length) continue;
+
+            results.push({
+                id,
+                bmid: data.bmid,
+                uid: data.uid,
+                length: parseInt(data.length)
+            });
+            await this._redis.zRem('trackers', id);
+        }
+
+        return results;
+    }
     async _ensureReady() {
         if (!this._connected) {
             await this.init();

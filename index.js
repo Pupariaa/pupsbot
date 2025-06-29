@@ -5,12 +5,14 @@ const IRCQueueManager = require("./services/Queue");
 const CommandManager = require('./services/Commands');
 const Performe = require('./services/Performe');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
-const { getUser } = require('./services/OsuApiV1');
+const { getUser, hasUserPlayedMap } = require('./services/OsuApiV1');
 const Logger = require('./utils/Logger');
 const generateId = require('./utils/generateId');
 
 const performe = new Performe();
 performe.init();
+global.temp = [];
+const trackers = [];
 
 const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
 
@@ -91,6 +93,70 @@ setInterval(() => {
     } catch (err) {
         Logger.errorCatch('MonitorInterval', err);
     }
+}, 1000);
+
+
+async function refreshTrackers(performe) {
+    const entries = await performe.getAllTrackedSuggestions();
+    const now = Date.now();
+
+    for (const { id, uid, bmid, length } of entries) {
+        const key = `track:${id}`;
+        if (trackers.some(t => t.key === key)) continue;
+
+        Logger.trackSuccess(`Added: USER:${uid} BMID:${bmid} ID:${id} length:${length}s (+2min buffer)`);
+
+        const action = async () => {
+            Logger.track(`→ Check USER:${uid} BMID:${bmid} (ID:${id})`);
+
+            const played = await hasUserPlayedMap(uid, bmid);
+            const index = trackers.findIndex(t => t.key === key);
+
+            if (played || (trackers[index]?.retries ?? 0) >= 1) {
+                if (index !== -1) trackers.splice(index, 1);
+                Logger.trackSuccess(`Score detected or no retries → Delete ID:${id}`);
+            } else {
+                if (index !== -1) trackers.splice(index, 1);
+                Logger.track(`No score → Retry in 10min (ID:${id})`);
+
+                trackers.push({
+                    key,
+                    uid,
+                    bmid,
+                    duration: 10 * 60 * 1000,
+                    start: Date.now(),
+                    retries: 1,
+                    action
+                });
+            }
+        };
+
+        trackers.push({
+            key,
+            uid,
+            bmid,
+            duration: (length + 120) * 1000,
+            start: now,
+            retries: 0,
+            action
+        });
+    }
+}
+
+async function runTrackers() {
+    const now = Date.now();
+    for (const tracker of [...trackers]) {
+        const elapsed = now - tracker.start;
+        if (elapsed >= tracker.duration) {
+            Logger.trackSuccess(`Execute USER=${tracker.uid} BMID:${tracker.bmid} after ${Math.round(elapsed / 1000)}s`);
+            await tracker.action();
+        }
+    }
+}
+
+setInterval(async () => {
+    await refreshTrackers(performe);
+    await runTrackers();
 }, 1000);
 
 const lastRequests = {};

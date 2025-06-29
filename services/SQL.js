@@ -63,6 +63,14 @@ class Thread2Database {
         });
     }
 
+    async updateSug(event_id, pp_earled) {
+        const SuggestedBeatmap = SuggestedBeatmapModel(this.sequelize);
+        await SuggestedBeatmap.update(
+            { pp_earled },
+            { where: { event_id } }
+        );
+    }
+
     async setHistory(command_id, command_input, response, user_id, username, Success, elapsed_time, locale) {
         const CommandHistory = CommandHistoryModel(this.sequelize);
         await CommandHistory.upsert({

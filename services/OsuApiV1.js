@@ -103,8 +103,6 @@ async function getTop100MultiMods(userId, id) {
     return results;
 }
 
-
-
 async function getBeatmap(bid) {
     if (!process.env.OSU_API_KEY) {
         Logger.errorCatch('OsuApiV1', 'Missing OSU_API_KEY in environment variables.');
@@ -118,4 +116,31 @@ async function getBeatmap(bid) {
     await performe.close();
     return data[0];
 }
-module.exports = { getUser, getTop100MultiMods, getBeatmap };
+
+async function hasUserPlayedMap(userId, beatmapId) {
+    if (!process.env.OSU_API_KEY) {
+        Logger.errorCatch('OsuApiV1', 'Missing OSU_API_KEY in environment variables.');
+        return false;
+    }
+
+    try {
+        const params = {
+            k: process.env.OSU_API_KEY,
+            u: userId,
+            b: beatmapId,
+            limit: 100,
+            m: 0
+        };
+
+        const response = await axios.get('https://osu.ppy.sh/api/get_scores', { params });
+        const scores = response.data;
+
+        if (!Array.isArray(scores)) return false;
+        return scores.length > 0;
+    } catch (err) {
+        Logger.errorCatch('OsuApiV1', `Error checking if user played beatmap ${beatmapId}`, err);
+        return false;
+    }
+}
+
+module.exports = { getUser, getTop100MultiMods, getBeatmap, hasUserPlayedMap };

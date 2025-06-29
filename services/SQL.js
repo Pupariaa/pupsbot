@@ -52,12 +52,14 @@ class Thread2Database {
         });
     }
 
-    async setSug(uid, bid) {
+    async setSug(uid, bid, event_id, pp_target) {
         const SuggestedBeatmap = SuggestedBeatmapModel(this.sequelize);
         await SuggestedBeatmap.upsert({
             user_id: uid,
             beatmap_id: bid,
+            event_id: event_id,
             Date: new Date(),
+            pp_target: pp_target
         });
     }
 

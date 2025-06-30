@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC+2';
 require('dotenv').config();
 const os = require('os');
 const OsuIRCClient = require("./services/IRC");
@@ -106,52 +107,60 @@ async function refreshTrackers(performe) {
         const key = `track:${id}`;
         if (trackers.some(t => t.key === key)) continue;
 
-        Logger.trackSuccess(`Added: USER:${uid} BMID:${bmid} ID:${id} length:${length}s (+2min buffer)`);
+        Logger.trackSuccess(`Tracking: ${id} for user ${uid} on beatmap ${bmid} wait ${length}s (+2min buffer)`);
 
         const action = async () => {
-            Logger.track(`→ Check USER:${uid} BMID:${bmid} (ID:${id})`);
-
-            const played = await hasUserPlayedMap(uid, bmid);
             const index = trackers.findIndex(t => t.key === key);
+            const tracker = trackers[index];
+            const suggestionStart = tracker?.start ?? now;
+            const retries = tracker?.retries ?? 0;
+            const played = await hasUserPlayedMap(uid, bmid);
 
-            if (played || (trackers[index]?.retries ?? 0) >= 1) {
-                if (played) {
-                    const twentyMinAgo = Date.now() - 20 * 60 * 1000;
-                    const scoreDate = new Date(played.date).getTime();
+            if (played && played.date) {
+                const parsedDate = new Date(played.date + 'Z');
+                if (isNaN(parsedDate.getTime())) {
+                    if (index !== -1) trackers.splice(index, 1);
+                    return;
+                }
 
-                    if (scoreDate >= twentyMinAgo && scoreDate <= Date.now()) {
-                        await db.updateSug(id, played.pp);
-                        Logger.trackSuccess(`Score detected in time range → Saved PP:${played.pp} for ID:${id}`);
-                    } else {
-                        Logger.track(`Score detected but outside time window (ID:${id})`);
+                const scoreDate = parsedDate.getTime();
+                const windowStart = suggestionStart - 20 * 60 * 1000;
+                const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
+                if (scoreDate >= windowStart && scoreDate <= windowEnd) {
+                    await db.updateSug(id, played.pp);
+                    Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp} for ID:${id}`);
+                } else {
+                    if (retries < 1) {
+                        trackers.splice(index, 1);
                         trackers.push({
                             key,
                             uid,
                             bmid,
                             duration: 10 * 60 * 1000,
                             start: Date.now(),
-                            retries: 1,
+                            retries: retries + 1,
                             action
                         });
+                        return;
                     }
                 }
-                if (index !== -1) trackers.splice(index, 1);
-
-                Logger.trackSuccess(`Score detected or no retries → Delete ID:${id}`);
             } else {
-                if (index !== -1) trackers.splice(index, 1);
-                Logger.track(`No score → Retry in 10min (ID:${id})`);
-
-                trackers.push({
-                    key,
-                    uid,
-                    bmid,
-                    duration: 10 * 60 * 1000,
-                    start: Date.now(),
-                    retries: 1,
-                    action
-                });
+                if (retries < 1) {
+                    trackers.splice(index, 1);
+                    trackers.push({
+                        key,
+                        uid,
+                        bmid,
+                        duration: 10 * 60 * 1000,
+                        start: Date.now(),
+                        retries: retries + 1,
+                        action
+                    });
+                    return;
+                }
             }
+
+            if (index !== -1) trackers.splice(index, 1);
         };
 
         trackers.push({
@@ -166,12 +175,12 @@ async function refreshTrackers(performe) {
     }
 }
 
+
 async function runTrackers() {
     const now = Date.now();
     for (const tracker of [...trackers]) {
         const elapsed = now - tracker.start;
         if (elapsed >= tracker.duration) {
-            Logger.trackSuccess(`Execute USER=${tracker.uid} BMID:${tracker.bmid} after ${Math.round(elapsed / 1000)}s`);
             await tracker.action();
         }
     }

@@ -135,8 +135,10 @@ async function hasUserPlayedMap(userId, beatmapId) {
         const response = await axios.get('https://osu.ppy.sh/api/get_scores', { params });
         const scores = response.data;
 
-        if (!Array.isArray(scores)) return false;
-        return scores.length > 0;
+        if (!Array.isArray(scores) || scores.length === 0) return false;
+        scores.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return scores[0];
     } catch (err) {
         Logger.errorCatch('OsuApiV1', `Error checking if user played beatmap ${beatmapId}`, err);
         return false;

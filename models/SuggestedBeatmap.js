@@ -1,7 +1,7 @@
 const { DataTypes } = require('sequelize');
 
 module.exports = (sequelizeInstance) => {
-    return sequelizeInstance.define('suggested_beatmap', {
+    return sequelizeInstance.define('suggested_beatmaps', {
         user_id: DataTypes.BIGINT,
         beatmap_id: DataTypes.BIGINT,
         Date: DataTypes.DATE,
@@ -9,6 +9,7 @@ module.exports = (sequelizeInstance) => {
         event_id: DataTypes.BIGINT,
         pp_earled: DataTypes.FLOAT
     }, {
+        tableName: 'suggested_beatmaps',
         timestamps: false
     });
 };

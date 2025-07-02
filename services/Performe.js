@@ -122,6 +122,20 @@ class Performe {
 
         return results;
     }
+
+    async addSuggestion(bmid, userid, ttl = 604800) {
+        await this._ensureReady();
+        const key = `user:${userid}:suggested`;
+        await this._redis.sAdd(key, bmid);
+        await this._redis.expire(key, ttl);
+    }
+    async getUserSuggestions(userid) {
+        await this._ensureReady();
+        const key = `user:${userid}:suggested`;
+        return await this._redis.sMembers(key);
+    }
+
+
     async _ensureReady() {
         if (!this._connected) {
             await this.init();

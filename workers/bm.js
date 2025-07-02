@@ -68,7 +68,8 @@ process.on('message', async (data) => {
         const startTime = Date.now();
 
         const params = parseCommandParameters(data.event.message);
-        const sug = await db.getSug(data.user.id);
+        const sug = await performe.getUserSuggestions(data.user.id);
+
         const top100 = await getTop100MultiMods(data.user.id, data.event.id);
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
         const top100Osu = top100.osu;
@@ -82,20 +83,18 @@ process.on('message', async (data) => {
             .filter(score => score.precision < 8)
             .sort((a, b) => b.precision - a.precision);
 
-        const now = Date.now();
         const t2 = performe.startTimer();
         const sortList = [];
 
+
         for (const score of filtered) {
             const mapId = parseInt(score.beatmap_id);
-            const previous = sug.find(e => e.beatmap_id === mapId);
-            const isOld = previous && (now - new Date(previous.Date).getTime()) > 604800000;
-            const isNotInList = !previous;
 
-            if (isOld || isNotInList) {
-                if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
-                    sortList.push(score);
-                }
+            const alreadySuggested = sug.includes(mapId.toString());
+            if (alreadySuggested) continue;
+
+            if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
+                sortList.push(score);
             }
         }
 
@@ -128,6 +127,7 @@ process.on('message', async (data) => {
         });
 
         await db.setSug(data.user.id, selected.beatmap_id, data.event.id, selected.pp);
+        await performe.addSuggestion(selected.beatmap_id, data.user.id);
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
 
     } catch (e) {

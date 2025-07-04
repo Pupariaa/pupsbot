@@ -120,6 +120,12 @@ Join the official Pupsbot team.
 
 ---
 
+### System informations
+Based on Dockerised services on Unraid OS
+CPUs 2x E5 2699 V4
+64GB DDR4 ECC 2400Mhz
+FULL NVMe Storage SSD
+
 ## Local Setup (for Developers)
 
 ### Requirements

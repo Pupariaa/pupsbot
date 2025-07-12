@@ -29,7 +29,7 @@ async function findScoresByPPRange(range, mods, id) {
             local mods = redis.call('HGET', id, 'mods')
             local precision = tonumber(redis.call('HGET', id, 'precision') or "9")
 
-    if precision <= 5 then
+    if precision <= 3 then
     if modFilter == "any" then
     table.insert(result, id)
     count = count + 1

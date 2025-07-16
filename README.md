@@ -1,6 +1,6 @@
 # Pupsbot
 
-Pupsbot is an osu! recommendation bot designed to help players find fresh, high-quality beatmaps that match their current skill level. It uses a hybrid approach: analyzing your own profile while drawing from the top performances of similar players. The bot operates entirely over osu!'s private messaging system (PM), not through IRC or Discord.
+Pupsbot is an osu! recommendation bot designed to help players find fresh, high-quality beatmaps that match their current skill level. It uses a hybrid approach: analyzing your own profile while drawing from the top performances of similar players. The bot operates entirely over osu!'s private messaging system (PM), not through Discord or other instantaned messageries.
 
 ---
 You can join the Discord server to stay informed about future updates, give feedback, or report bugs.

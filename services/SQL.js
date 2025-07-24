@@ -91,6 +91,21 @@ class Thread2Database {
             await notifier.send(`Failed to update suggestion for event ${eventId}: ${error.message}`, 'DB.UPDATE_SUGGESTION');
         }
     }
+    async setSug(uid, bid, event_id, pp_target) {
+        try {
+            const SuggestedBeatmap = SuggestedBeatmapModel(this.sequelize);
+            await SuggestedBeatmap.upsert({
+                user_id: uid,
+                beatmap_id: bid,
+                event_id: event_id,
+                Date: new Date(),
+                pp_target: pp_target
+            });
+        } catch (err) {
+            Logger.errorCatch('DB.SET_SUG', err);
+            await notifier.send(`Error DB.setSug(${uid}, ${bid}): ${err.message}`, 'DB.SET_SUG');
+        }
+    }
 
     async saveCommandHistory(commandId, input, response, userId, username, success, durationMs, locale) {
         try {

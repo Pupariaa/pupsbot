@@ -39,7 +39,7 @@ module.exports = {
             }
 
             await queue.addToQueue(event.nick, responseMessage.trim(), true, u.id, true);
-            await db.setHistory(event.id, event.message, responseMessage, event.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, event.id, event.nick, true, 0, u.locale);
         } catch (err) {
             Logger.errorCatch('Command::mods', err);
             await queue.addToQueue(event.nick, "An error occurred while executing the mods command.", false, event.id, false);

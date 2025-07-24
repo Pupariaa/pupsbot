@@ -19,7 +19,7 @@ module.exports = {
                 : `Join the Pupsbot team ! [https://osu.ppy.sh/teams/26792 BSBT TEAM]`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         } catch (err) {
             Logger.errorCatch('Command::teams', err);
             await queue.addToQueue(event.nick, "An error occurred while executing the teams command.", false, event.id, false);

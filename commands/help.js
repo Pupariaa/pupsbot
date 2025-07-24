@@ -19,7 +19,7 @@ module.exports = {
                 : `Orders available: !bm [Give a beatmap not played (or played a long time ago / not in your top rank) but played by someone your rank] <mods> (e.g. HDHR or nm to get only no-mod maps) | !info [Bot information] /np [Give the pp earnings of the ranked map sent] | !help [Help] | !support [Support the project] | !release [Update information] | !fb <feedback> to give constructive feedback on Pupsbot | !teams [Join the Pupsbot team]`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         } catch (err) {
             Logger.errorCatch('Command::help', err);
             await queue.addToQueue(event.nick, "An error occurred while executing the help command.", false, event.id, false);

@@ -19,7 +19,7 @@ module.exports = {
                 : `To support the project, here is [https://ko-fi.com/bellafiora the kofi link] :) Thanks-u ♥`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         } catch (err) {
             Logger.errorCatch('Command::support', err);
             await queue.addToQueue(event.nick, "An error occurred while executing the support command.", false, event.id, false);

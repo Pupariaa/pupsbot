@@ -24,8 +24,8 @@ module.exports = {
                 : `Thanks for your feedback ♥`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.saveFeedBack(event.id, result, u.id, event.nick, u.locale);
-            await db.setHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveFeedback(event.id, result, u.id, event.nick, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
         } catch (e) {
             Logger.errorCatch('fb', e);
             await queue.addToQueue(event.nick, "An error occurred while executing the fb command.", false, event.id, false);

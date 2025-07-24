@@ -16,6 +16,11 @@ const { getTop100MultiMods, getBeatmap } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const Logger = require('../utils/Logger');
 
+const Notifier = require('../services/Notifier');
+const notifier = new Notifier();
+
+const { getUserErrorMessage } = require('../utils/UserFacingError');
+
 let GlobalData = null;
 
 function filterOutTop100(results, beatmapIdSet) {
@@ -55,9 +60,6 @@ function pickBestRandomPrecision(filtered) {
 
 process.on('message', async (data) => {
     GlobalData = data;
-
-
-
     const db = new Thread2Database();
     const performe = new Performe();
 
@@ -66,13 +68,11 @@ process.on('message', async (data) => {
         await performe.init();
         const t = performe.startTimer();
         const startTime = Date.now();
-
         const params = parseCommandParameters(data.event.message);
-        const sug = await performe.getUserSuggestions(data.user.id);
-
+        const suggestions = await performe.getUserSuggestions(data.user.id);
         const top100 = await getTop100MultiMods(data.user.id, data.event.id);
-        const sum = computeCrossModeProgressionPotential(data.user.id, top100);
         const top100Osu = top100.osu;
+        const sum = computeCrossModeProgressionPotential(data.user.id, top100);
 
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
         const results = await findScoresByPPRange({ min, max }, params.mods, data);
@@ -86,25 +86,31 @@ process.on('message', async (data) => {
         const t2 = performe.startTimer();
         const sortList = [];
 
-
         for (const score of filtered) {
             const mapId = parseInt(score.beatmap_id);
-
-            const alreadySuggested = sug.includes(mapId.toString());
-            if (alreadySuggested) continue;
+            if (suggestions.includes(mapId.toString())) continue;
 
             if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
                 sortList.push(score);
             }
         }
 
-        const selected = pickBestRandomPrecision(sortList);
         await performe.logDuration('SORTBM', await t2.stop('SORTBM'));
+
+        const selected = pickBestRandomPrecision(sortList);
 
         if (!selected) {
             const elapsed = Date.now() - startTime;
-            const msg = SendNotFoundBeatmapMessage(data.user.country, elapsed);
-            process.send({ username: data.event.nick, response: msg, uid: data.event.id });
+            const msg = getUserErrorMessage('ERR_NO_BEATMAP', data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
             await db.setHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
             return;
         }
@@ -117,38 +123,44 @@ process.on('message', async (data) => {
         await performe.logCommand(data.user.id, 'BM');
         await performe.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
 
-
         process.send({
             username: data.event.nick,
             response,
             id: data.event.id,
             beatmapId: selected.beatmap_id,
             userId: data.user.id,
+            success: true
         });
 
         await db.setSug(data.user.id, selected.beatmap_id, data.event.id, selected.pp);
         await performe.addSuggestion(selected.beatmap_id, data.user.id);
         await db.setHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
-
     } catch (e) {
         Logger.errorCatch('Bm Worker', e);
+        await notifier.send(`BM Worker Error: ${e.toString()}`, 'WORKER.BM.FAIL');
+
         try {
-            const response = SendNotFoundBeatmapMessage(data.user.country, 0);
-            const elapsed = Date.now() - Date.now();
+            const locale = data.user?.locale || 'FR';
+            const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
+
             await performe.logDuration('BM', 0);
             await performe.logCommand(data.user.id, 'BM');
             await performe.close();
+
             process.send({
                 username: data.event.nick,
-                response,
+                response: msg,
                 id: data.event.id,
-                beatmapId: null,
+                beatmapId: 0,
                 userId: data.user.id,
-                success: false
+                success: true,
+                errorCode: 'ERR_WORKER_CRASH'
             });
-            await db.setHistory(data.event.id, data.event.message, 'Error', data.user.id, data.event.nick, false, elapsed);
-        } catch (err) {
-            Logger.errorCatch('Bm Worker', err);
+
+            await db.setHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+        } catch (inner) {
+            Logger.errorCatch('Bm Worker → Secondary Failure', inner);
+            await notifier.send(`Double error in worker.bm.js: ${inner.toString()}`, 'WORKER.BM.FAIL2');
         }
     } finally {
         await performe.close();
@@ -156,6 +168,5 @@ process.on('message', async (data) => {
         try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();
         process.exit(0);
-
     }
 });

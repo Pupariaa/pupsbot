@@ -1,5 +1,5 @@
-process.env.TZ = 'UTC+2';
 require('dotenv').config();
+process.env.TZ = 'UTC+2';
 const os = require('os');
 const OsuIRCClient = require("./services/IRC");
 const IRCQueueManager = require("./services/Queue");
@@ -11,11 +11,16 @@ const Logger = require('./utils/Logger');
 const generateId = require('./utils/generateId');
 const SQL = require('./services/SQL');
 
+const Notifier = require('./services/Notifier');
+const notifier = new Notifier();
+
+
 const performe = new Performe();
 const db = new SQL();
 performe.init();
 global.temp = [];
 const trackers = [];
+
 
 const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
 
@@ -198,8 +203,8 @@ try {
     ircBot = new OsuIRCClient({
         username: process.env.IRC_USERNAME,
         password: process.env.IRC_PASSWORD,
-        channel: "#osu"
-    });
+        channel: "#osu",
+    }, notifier);
 
     queue = new IRCQueueManager(
         (target, message) => ircBot.sendMessage(message, target),
@@ -213,6 +218,7 @@ try {
 
     commandManager = new CommandManager();
     ircBot.connect();
+
 } catch (err) {
     Logger.errorCatch('Startup', err);
 }
@@ -271,10 +277,14 @@ ircBot?.onMessage(async (event) => {
     }
 });
 
-process.on('uncaughtException', (err) => {
+
+process.on('uncaughtException', async (err) => {
     Logger.errorCatch('uncaughtException', err);
+    await notifier.send('uncaughtException', err);
+
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', async (reason, promise) => {
     Logger.errorCatch('unhandledRejection', reason);
+    await notifier.send('unhandledRejection', reason);
 });

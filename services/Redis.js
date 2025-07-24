@@ -23,7 +23,6 @@ class RedisManager {
         this.client.on('connect', () => {
             this._connected = true;
             this._connecting = false;
-            Logger.redis('Connected to Redis server.');
         });
 
         this.client.on('error', async (error) => {
@@ -34,7 +33,6 @@ class RedisManager {
         this.client.on('end', () => {
             this._connected = false;
             this._connecting = false;
-            Logger.redis('Redis connection closed.');
         });
     }
 

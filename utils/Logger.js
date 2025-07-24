@@ -16,12 +16,19 @@ class Logger {
         this._log('\x1b[94m', 'Service', message);
     }
 
+    static redis(message) {
+        this._log('\x1b[31m', 'REDIS', message);
+    }
+
     static irc(message) {
         this._log('\x1b[36m', 'IRC', message);
     }
 
     static ircError(message) {
         this._log('\x1b[31m', 'IRC ERROR', message);
+    }
+    static redisErr(message) {
+        this._log('\x1b[31m', 'REDIS ERROR', message);
     }
 
     static queue(message) {

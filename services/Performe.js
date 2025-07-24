@@ -1,5 +1,7 @@
 const RedisManager = require('./Redis');
 const Logger = require('../utils/Logger');
+const Notifier = require('../services/Notifier');
+const notifier = new Notifier();
 
 class Performe {
     constructor() {
@@ -9,148 +11,173 @@ class Performe {
     }
 
     async init() {
-        if (!this._connected) {
+        if (this._connected) return;
+        try {
             await this._redisManager.connect();
             this._redis = this._redisManager.instance;
             this._connected = true;
+        } catch (error) {
+            Logger.errorCatch('PERFORME.INIT', error);
+            await notifier.send(`Redis initialization error in Performe: ${error.message}`, 'PERFORME.INIT');
+            throw error;
         }
     }
 
     async close() {
-        if (this._connected) {
-            try {
-                await this._redis.quit();
-            } catch (e) {
-
-            }
-
+        if (!this._connected) return;
+        try {
+            await this._redis.quit();
             this._connected = false;
+        } catch (error) {
+            Logger.errorCatch('PERFORME.CLOSE', error);
+            await notifier.send(`Redis shutdown error in Performe: ${error.message}`, 'PERFORME.CLOSE');
         }
     }
 
-    async logDuration(commandName, durationMs) {
-        await this._ensureReady();
-        const key = `perf:duration:${commandName}`;
-        const epoch = Date.now();
-        await this._redis.zAdd(key, [{ score: epoch, value: durationMs.toString() }]);
+    async logDuration(command, durationMs) {
+        try {
+            await this._ensureReady();
+            await this._redis.zAdd(`perf:duration:${command}`, [{ score: Date.now(), value: durationMs.toString() }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.LOG_DURATION', error);
+        }
     }
 
-    async logCommand(userId, commandName) {
-        await this._ensureReady();
-        const key = `perf:command:${commandName}`;
-        const epoch = Date.now();
-        await this._redis.zAdd(key, [{ score: epoch, value: userId.toString() }]);
+    async logCommand(userId, command) {
+        try {
+            await this._ensureReady();
+            await this._redis.zAdd(`perf:command:${command}`, [{ score: Date.now(), value: userId.toString() }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.LOG_COMMAND', error);
+        }
     }
 
     async logDBAccess(queryName, durationMs) {
-        await this._ensureReady();
-        const key = `perf:db:${queryName}`;
-        const epoch = Date.now();
-        await this._redis.zAdd(key, [{ score: epoch, value: durationMs.toString() }]);
+        try {
+            await this._ensureReady();
+            await this._redis.zAdd(`perf:db:${queryName}`, [{ score: Date.now(), value: durationMs.toString() }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.LOG_DB_ACCESS', error);
+        }
     }
 
     startTimer() {
         const start = process.hrtime.bigint();
         return {
-            stop: async (commandName) => {
-                const end = process.hrtime.bigint();
-                const durationMs = Number(end - start) / 1e6;
-                await this.logDuration(commandName, durationMs);
-                return durationMs;
+            stop: async (command) => {
+                const duration = Number(process.hrtime.bigint() - start) / 1e6;
+                await this.logDuration(command, duration);
+                return duration;
             }
         };
     }
 
     async markPending(id, ttl = 30) {
-        await this._ensureReady();
-        const timestamp = Date.now();
-        await this._redis.set(`pending:${id}`, '1', { EX: ttl });
-        await this._redis.zAdd('unresolved:pending', [{ score: timestamp, value: id.toString() }]);
-    }
-
-    async markPending(id, ttl = 30) {
-        Logger.task(`Pending ${id}`);
-        await this._ensureReady();
-        const timestamp = Date.now();
-        await this._redis.set(`pending:${id}`, '1', { EX: ttl });
-        await this._redis.zAdd('unresolved:pending', [{ score: timestamp, value: id.toString() }]);
+        try {
+            Logger.task(`Mark pending: ${id}`);
+            await this._ensureReady();
+            await this._redis.set(`pending:${id}`, '1', { EX: ttl });
+            await this._redis.zAdd('unresolved:pending', [{ score: Date.now(), value: id.toString() }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.MARK_PENDING', error);
+        }
     }
 
     async markResolved(id) {
-        Logger.task(`Resolved ${id}`);
-        await this._ensureReady();
-        await this._redis.del(`pending:${id}`);
-        await this._redis.zRem('unresolved:pending', id.toString());
+        try {
+            Logger.task(`Mark resolved: ${id}`);
+            await this._ensureReady();
+            await this._redis.del(`pending:${id}`);
+            await this._redis.zRem('unresolved:pending', id.toString());
+        } catch (error) {
+            Logger.errorCatch('PERFORME.MARK_RESOLVED', error);
+        }
     }
 
-    async markCancelled(id, error = false) {
-        Logger.taskError(`${id}`);
-        error ? Logger.taskError(id) : Logger.taskRejected(id);
-        await this._ensureReady();
-        await this._redis.del(`pending:${id}`);
-        await this._redis.zRem('unresolved:pending', id.toString());
-        await this._redis.zAdd('cancelled:pending', [{ score: Date.now(), value: id.toString() }]);
+    async markCancelled(id, isError = false) {
+        try {
+            isError ? Logger.taskError(id) : Logger.taskRejected(id);
+            await this._ensureReady();
+            await this._redis.del(`pending:${id}`);
+            await this._redis.zRem('unresolved:pending', id.toString());
+            await this._redis.zAdd('cancelled:pending', [{ score: Date.now(), value: id.toString() }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.MARK_CANCELLED', error);
+        }
     }
+
     async trackSuggestedBeatmap(bmid, uid, length, id) {
-        await this._redis.hSet(`track:${id}`, {
-            bmid,
-            uid,
-            length
-        });
-        await this._redis.expire(`track:${id}`, 86400);
-        await this._redis.zAdd('trackers', [{ score: Date.now(), value: id }]);
+        try {
+            await this._ensureReady();
+            await this._redis.hSet(`track:${id}`, { bmid, uid, length });
+            await this._redis.expire(`track:${id}`, 86400); // 24h
+            await this._redis.zAdd('trackers', [{ score: Date.now(), value: id }]);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.TRACK_BM', error);
+        }
     }
 
     async getAllTrackedSuggestions() {
-        const now = Date.now();
-        const results = [];
+        try {
+            await this._ensureReady();
+            const entries = await this._redis.zRangeByScore('trackers', 0, Date.now());
+            const results = [];
 
-        const entries = await this._redis.zRangeByScore('trackers', 0, now);
+            for (const id of entries) {
+                const data = await this._redis.hGetAll(`track:${id}`);
+                if (!data || !data.bmid || !data.uid || !data.length) continue;
 
-        for (const id of entries) {
-            const data = await this._redis.hGetAll(`track:${id}`);
-            if (!data || !data.bmid || !data.uid || !data.length) continue;
+                results.push({
+                    id,
+                    bmid: data.bmid,
+                    uid: data.uid,
+                    length: parseInt(data.length, 10)
+                });
 
-            results.push({
-                id,
-                bmid: data.bmid,
-                uid: data.uid,
-                length: parseInt(data.length)
-            });
-            await this._redis.zRem('trackers', id);
-        }
+                await this._redis.zRem('trackers', id);
+            }
 
-        return results;
-    }
-
-    async addSuggestion(bmid, userid, ttl = 604800) {
-        await this._ensureReady();
-        const key = `user:${userid}:suggested`;
-        await this._redis.sAdd(key, bmid);
-        await this._redis.expire(key, ttl);
-    }
-    async getUserSuggestions(userid) {
-        await this._ensureReady();
-        const key = `user:${userid}:suggested`;
-        return await this._redis.sMembers(key);
-    }
-
-
-    async _ensureReady() {
-        if (!this._connected) {
-            await this.init();
+            return results;
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_TRACKED', error);
+            return [];
         }
     }
 
-    async _ensureReady() {
-        if (!this._connected) {
-            await this.init();
+    async addSuggestion(bmid, userId, ttl = 604800) {
+        try {
+            await this._ensureReady();
+            const key = `user:${userId}:suggested`;
+            await this._redis.sAdd(key, bmid);
+            await this._redis.expire(key, ttl);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.ADD_SUGGESTION', error);
+        }
+    }
+
+    async getUserSuggestions(userId) {
+        try {
+            await this._ensureReady();
+            return await this._redis.sMembers(`user:${userId}:suggested`);
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_SUGGESTIONS', error);
+            return [];
         }
     }
 
     async heartbeat() {
-        await this._ensureReady();
-        await this._redis.set('bot:main:heartbeat', Date.now().toString());
+        try {
+            await this._ensureReady();
+            await this._redis.set('bot:main:heartbeat', Date.now().toString());
+        } catch (error) {
+            Logger.errorCatch('PERFORME.HEARTBEAT', error);
+        }
+    }
+
+    async _ensureReady() {
+        if (!this._connected) {
+            await this.init();
+        }
     }
 }
 

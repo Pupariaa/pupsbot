@@ -63,6 +63,7 @@ function parseCommandParameters(message) {
                 unsupportedMods.push(mod);
             }
         } else {
+            if (token === '+') continue;
             unknownTokens.push(token);
         }
     }

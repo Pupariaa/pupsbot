@@ -111,7 +111,7 @@ process.on('message', async (data) => {
                 success: true,
                 errorCode: 'ERR_NO_BEATMAP'
             });
-            await db.setHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
             return;
         }
 
@@ -132,7 +132,6 @@ process.on('message', async (data) => {
             success: true
         });
 
-        await db.setSug(data.user.id, selected.beatmap_id, data.event.id, selected.pp);
         await performe.addSuggestion(selected.beatmap_id, data.user.id);
         await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
     } catch (e) {

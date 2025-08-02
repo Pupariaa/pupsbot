@@ -1,12 +1,14 @@
 {
   "name": "pupsbot",
-  "version": "2.0.212",
+  "version": "2.0.219",
+  "date": "2025-08-02",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "type": "commonjs",
   "keywords": [],
-  "author": "",
+  "author": "Puparia",
   "license": "ISC",
   "description": "",
   "dependencies": {

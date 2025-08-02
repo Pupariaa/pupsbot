@@ -49,6 +49,8 @@ function parseCommandParameters(message) {
     const tokens = input.replace(/[^\w:+]/g, ' ').split(/\s+/).filter(Boolean);
 
     for (const token of tokens) {
+        if (token === '+') continue;
+
         const precisionMatch = token.match(/^PRECIS[:]?(\d)$/);
         if (precisionMatch) {
             precision = parseInt(precisionMatch[1], 10);
@@ -62,8 +64,30 @@ function parseCommandParameters(message) {
             } else {
                 unsupportedMods.push(mod);
             }
-        } else {
-            if (token === '+') continue;
+            continue;
+        }
+
+        // Try to split unknown token into 2-char chunks
+        let matched = false;
+        if (!hasPlus && token.length % 2 === 0) {
+            for (let i = 0; i < token.length; i += 2) {
+                const chunk = token.substring(i, i + 2);
+                const splitMod = allKnownMods[chunk];
+                if (splitMod) {
+                    if (supportedMods.includes(splitMod)) {
+                        mods.add(splitMod);
+                    } else {
+                        unsupportedMods.push(splitMod);
+                    }
+                    matched = true;
+                } else {
+                    matched = false;
+                    break;
+                }
+            }
+        }
+
+        if (!matched) {
             unknownTokens.push(token);
         }
     }

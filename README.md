@@ -70,7 +70,7 @@ Pupsbot supports 4 syntaxes for controlling which mods are used in the recommend
 |-------------------|-----------------------------------------------------------------------------|
 | `!o`             | Returns any map, with any mod combination                                    |
 | `!o NM`          | Forces the recommendation to be a **No Mod** map                            |
-| `!o <mods>`      | Forces the recommendation to match **only** those mods (e.g. `!bm HDHR`)    |
+| `!o <mods>`      | Forces the recommendation to match **only** those mods (e.g. `!o HDHR`)    |
 | `!o + <mods>`    | Recommends a map that **includes** the mods you wrote, but allows more mods |
 
 </div>

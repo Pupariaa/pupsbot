@@ -1,5 +1,5 @@
-const RedisManager = require('../services/Redis');
-const Performe = require('../services/Performe');
+const RedisManager = require('../../services/Redis');
+const Performe = require('../../services/Performe');
 
 async function findScoresByPPRange(range, mods, id) {
     const performe = new Performe();
@@ -17,34 +17,36 @@ async function findScoresByPPRange(range, mods, id) {
     const useModsFilter = mods.length > 0;
 
     const luaScript = `
-        local ids = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'LIMIT', 0, 1000000)
-        local result = {}
-        local count = 0
-        local maxResults = 1000000
-        local modFilter = ARGV[3]
+    local ids = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'LIMIT', 0, 1000000)
+    local result = {}
+    local count = 0
+    local maxResults = 1000000
+    local modFilter = ARGV[3]
 
     for _, id in ipairs(ids) do
         if count >= maxResults then break end
 
-            local mods = redis.call('HGET', id, 'mods')
-            local precision = tonumber(redis.call('HGET', id, 'precision') or "9")
+        local mods = redis.call('HGET', id, 'mods')
+        local precision = tonumber(redis.call('HGET', id, 'precision') or "9")
+        local mode = redis.call('HGET', id, 'type')
 
-    if precision <= 3 then
-    if modFilter == "any" then
-    table.insert(result, id)
-    count = count + 1
+        if mode == 'osu' then
+            if precision <= 3 then
+                if modFilter == "any" then
+                    table.insert(result, id)
+                    count = count + 1
                 else
-    if mods ~= "0" and mods ~= false and mods ~= "" then
-    table.insert(result, id)
-    count = count + 1
-    end
-    end
-    end
+                    if mods ~= "0" and mods ~= false and mods ~= "" then
+                        table.insert(result, id)
+                        count = count + 1
+                    end
+                end
+            end
+        end
     end
 
     return result
-        `;
-
+`;
     const t2 = performe.startTimer();
     const rawIds = await redis.instance.eval(luaScript, {
         keys: ['scores_by_pp'],

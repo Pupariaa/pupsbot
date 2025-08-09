@@ -1,4 +1,4 @@
-const Performe = require('../services/Performe');
+const Performe = require('../../services/Performe');
 
 async function computeRefinedGlobalPPRange(userPP, topScores, id, progressionData = null) {
     const performe = new Performe();

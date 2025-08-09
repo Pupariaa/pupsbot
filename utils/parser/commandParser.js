@@ -1,4 +1,4 @@
-function parseCommandParameters(message) {
+function parseCommandParameters(message, gamemode) {
     const parts = message.trim().split(/\s+/);
     const rawArgs = parts.slice(1).join(' ');
     const input = rawArgs.toUpperCase();
@@ -6,28 +6,23 @@ function parseCommandParameters(message) {
 
     const allKnownMods = {
         NM: 'NM', NOMOD: 'NM', NOMODS: 'NM',
-
         HD: 'HD', HIDDEN: 'HD',
         HR: 'HR', HARDROCK: 'HR',
         DT: 'DT', DOUBLETIME: 'DT',
         NC: 'NC', NIGHTCORE: 'NC',
         EZ: 'EZ', EASY: 'EZ',
-
         FL: 'FL', FLASHLIGHT: 'FL',
         SD: 'SD', SUDDENDEATH: 'SD',
         PF: 'PF', PERFECT: 'PF',
-
         SO: 'SO', SPUNOUT: 'SO',
         RX: 'RX', RELAX: 'RX',
         AP: 'AP', AUTOPILOT: 'AP',
         AT: 'AT', AUTO: 'AT',
-
         V2: 'V2', SCOREV2: 'V2',
         FI: 'FI', FADEIN: 'FI',
         TP: 'TP', TIMEWARP: 'TP',
         CN: 'CN', CINEMA: 'CN',
         COOP: 'COOP',
-
         KEY1: 'KEY1', '1K': 'KEY1',
         KEY2: 'KEY2', '2K': 'KEY2',
         KEY3: 'KEY3', '3K': 'KEY3',
@@ -36,10 +31,13 @@ function parseCommandParameters(message) {
         KEY6: 'KEY6', '6K': 'KEY6',
         KEY7: 'KEY7', '7K': 'KEY7',
         KEY8: 'KEY8', '8K': 'KEY8',
-        KEY9: 'KEY9', '9K': 'KEY9',
+        KEY9: 'KEY9', '9K': 'KEY9'
     };
 
-    const supportedMods = ['HD', 'HR', 'DT', 'NC', 'EZ', 'NM'];
+    const mode = (gamemode || 'osu').toLowerCase();
+    const supportedMods = mode === 'mania'
+        ? ['NF', 'EZ', 'HD', 'FL', 'DT', 'NC', 'FI', 'KEY1', 'KEY2', 'KEY3', 'KEY4', 'KEY5', 'KEY6', 'KEY7', 'KEY8', 'KEY9']
+        : ['HD', 'HR', 'DT', 'NC', 'EZ', 'NM'];
 
     const mods = new Set();
     const unsupportedMods = [];
@@ -57,32 +55,41 @@ function parseCommandParameters(message) {
             continue;
         }
 
-        const mod = allKnownMods[token];
-        if (mod) {
-            if (supportedMods.includes(mod)) {
-                mods.add(mod);
+        const mapped = allKnownMods[token];
+        if (mapped) {
+            let modToAdd = mapped;
+            if (mode === 'mania' && mapped === 'NC') modToAdd = 'DT';
+            if (supportedMods.includes(modToAdd)) {
+                mods.add(modToAdd);
             } else {
-                unsupportedMods.push(mod);
+                unsupportedMods.push(mapped);
             }
             continue;
         }
 
-        // Try to split unknown token into 2-char chunks
         let matched = false;
         if (!hasPlus && token.length % 2 === 0) {
+            const tempMods = [];
             for (let i = 0; i < token.length; i += 2) {
                 const chunk = token.substring(i, i + 2);
-                const splitMod = allKnownMods[chunk];
-                if (splitMod) {
-                    if (supportedMods.includes(splitMod)) {
-                        mods.add(splitMod);
-                    } else {
-                        unsupportedMods.push(splitMod);
-                    }
-                    matched = true;
+                const splitMapped = allKnownMods[chunk];
+                if (splitMapped) {
+                    let splitToAdd = splitMapped;
+                    if (mode === 'mania' && splitMapped === 'NC') splitToAdd = 'DT';
+                    tempMods.push({ original: splitMapped, normalized: splitToAdd });
                 } else {
-                    matched = false;
+                    tempMods.length = 0;
                     break;
+                }
+            }
+            if (tempMods.length > 0) {
+                matched = true;
+                for (const m of tempMods) {
+                    if (supportedMods.includes(m.normalized)) {
+                        mods.add(m.normalized);
+                    } else {
+                        unsupportedMods.push(m.original);
+                    }
                 }
             }
         }

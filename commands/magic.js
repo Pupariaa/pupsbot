@@ -15,7 +15,13 @@ module.exports = {
             child.send({ event, user });
 
             child.on('message', async (msgFromWorker) => {
-
+                await queue.addToQueue(
+                    msgFromWorker.username,
+                    msgFromWorker.response,
+                    false,
+                    msgFromWorker.id,
+                    msgFromWorker.success
+                );
             });
         } catch (e) {
             Logger.errorCatch('bm', e);

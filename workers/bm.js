@@ -9,7 +9,7 @@ const computeTargetPP = require('../compute/targetPP');
 const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
 
 const modsToBitwise = require('../utils/osu/modsToBitwise');
-const parseCommandParameters = require('../utils/parser/bmParser');
+const parseCommandParameters = require('../utils/parser/commandParser');
 
 const { getTop100MultiMods, getBeatmap } = require('../services/OsuApiV1');
 
@@ -69,6 +69,7 @@ process.on('message', async (data) => {
         const t = performe.startTimer();
         const startTime = Date.now();
         const params = parseCommandParameters(data.event.message);
+        console.log(params)
         const suggestions = await performe.getUserSuggestions(data.user.id);
         const top100 = await getTop100MultiMods(data.user.id, data.event.id);
         const top100Osu = top100.osu;

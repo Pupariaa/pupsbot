@@ -35,6 +35,12 @@ module.exports = {
                         global.temp.push(msgFromWorker.username);
 
                     }
+
+                    const responseMessage = user.locale === 'FR'
+                        ? `La commande !bm est obsolète. Utilise !o à la place — elle devient la norme pour osu! (multi-mode en approche).`
+                        : `The !bm command is deprecated. Please use !o instead — it's the new standard for osu! beatmap queries (multi-mode incoming).`;
+
+                    await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
                     child.kill();
                 }
             });

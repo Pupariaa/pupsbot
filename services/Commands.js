@@ -7,9 +7,8 @@ const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
 
 class CommandManager {
-    constructor(gameModeManager = null, commandsPath = path.join(__dirname, '..', 'commands')) {
+    constructor(commandsPath = path.join(__dirname, '..', 'commands')) {
         this.commands = new Map();
-        this.gameModeManager = gameModeManager;
         this._loadAllCommands(commandsPath);
     }
 

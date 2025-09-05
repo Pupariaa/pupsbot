@@ -19,8 +19,19 @@ You can join the Discord server to stay informed about future updates, give feed
 <a href="https://techalchemy.fr/pupsbot/pngStats/stats.html">Go to Live statistics</a>
 </p>
 
+## 📊 Dashboard & Monitoring
 
+For detailed insights into Pupsbot's performance, health status, and real-time metrics, visit our comprehensive dashboard:
 
+The dashboard provides:
+- **Real-time bot status** and health monitoring
+- **Performance metrics** and response times
+- **API usage statistics** (V1/V2 hybrid system)
+- **User activity trends** and command usage
+- **System resources** and infrastructure status
+- **Error tracking** and debugging information
+
+Perfect for monitoring bot reliability and understanding usage patterns!
 
 ---
 
@@ -29,7 +40,7 @@ You can join the Discord server to stay informed about future updates, give feed
 Unlike other bots that simply suggest popular or high-pp maps, Pupsbot uses real player data to make targeted suggestions. The goal is to help you **farm pp efficiently** by finding beatmaps:
 
 - Played recently by players close to your skill level
-- Not in your own top 100
+- Not in your own top 200
 - That you haven’t played recently
 
 This approach helps avoid repetitive suggestions and gives you fresh maps that are **likely to be within your reach**, but still provide meaningful pp.
@@ -39,11 +50,11 @@ This approach helps avoid repetitive suggestions and gives you fresh maps that a
 ## How It Works
 
 1. **You send a private message on osu! to the bot account `Puparia`.**
-2. Pupsbot uses the osu! API v1 to fetch your profile and top 100 scores.
+2. Pupsbot uses the osu! API v1 to fetch your profile and top 200 scores.
 3. It identifies a pool of other users with similar total pp and recent trends.
 4. From their top scores, it builds a pool of candidate beatmaps.
 5. The bot filters out:
-   - Maps that are in your own top 100
+   - Maps that are in your own top 200
    - Maps you've played recently (based on stored play history)
    - Maps that don’t match your requested filters (if any)
 6. It returns up to 3 suggestions, optimized for pp gain and mod compatibility.
@@ -121,7 +132,7 @@ Old command for the "osu" mode replaced by `!o` (osu) for more consistency
 
 ## Technical Overview
 
-- **API:** Uses osu! API v1 only (no OAuth, no v2)
+- **API:** Uses osu! API v1 **and** v2
 - **IRC:** Powered by `irc-framework` to listen and respond to private messages
 - **Database:** Uses Sequelize with MySQL/MariaDB
 - **Cache:** Redis is used to reduce latency and speed up match-making
@@ -132,7 +143,7 @@ Old command for the "osu" mode replaced by `!o` (osu) for more consistency
 
 ### System informations
 - Based on Dockerised services on Unraid OS
-- CPUs 2x E5 2699 V4
+- CPUs 1x E5 2699 V4
 - 64GB DDR4 ECC 2400Mhz
 - FULL NVMe Storage SSD
 
@@ -144,6 +155,7 @@ Old command for the "osu" mode replaced by `!o` (osu) for more consistency
 - Redis
 - MySQL or MariaDB
 - osu! API v1 key (get yours at https://osu.ppy.sh/p/api)
+- osu! API v2 client ID and private key (on your osu!parameters)
 
 ### Steps
 

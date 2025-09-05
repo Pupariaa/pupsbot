@@ -15,30 +15,34 @@ module.exports = {
 
             const u = await getUser(event.nick);
             const responseMessage = u.locale === 'FR' ?
-                `-- V2.0.1 Mise à jour majeure de Pupsbot ! Qu'est ce qui a changé ? --
-                - Support des mods ! Ajoute simplement les mods désiré après la commande. E.g: !bm hd dt. Par défaut, Pupsbot ne te donnera que des maps sans mods. Rajoute simplement un + dans la commande pour autoriser la découverte de maps avec des mods. Si tu ne l'as pas ajouté mais que tu as spécifié un ou des mods, uniquement les mods spécifiés seront pris en compte.
-                - Meilleur précision de scores. Tu peux exiger au bot de se baser sur des scores plus précis. Rajoute simplement "precis x" en remplaçant le x par une valeur de 1 à 8.
-                - Une base de donnée beaucoup plus vaste avec plus de 50 millions de scores de références.
-                - L'ajout du "Rank Up Cible". Le Rank Up Cible c'est tout simplement le nombre de PP qu'il te faudra faire pour rank up. Il est également utilisé pour donner des maps qui te permettrons à coup sûr de rank up.
-                -- V2.0.2 FixBug --
-                - Bug fix
-                - Anti Spam
-                - Optimisations
-                - Ajout du star rating
-                - Ajout du mode "NM" pour avoir exclusivement des maps no mods
+                `-- V2.0.3 Nouvelle mise à jour Pupsbot ! --
+                - Nouveaux filtres avancés : pp:XXX et bpm:XXX pour des recommendations ultra-précises
+                - Exemple: !o HD pp:200 bpm:180 pour des maps HD donnant ~200pp avec ~180 BPM
+                - Système de tracking des scores réparé (était cassé depuis 1 mois+)
+                - Intégration osu! API V2 pour de meilleures performances
+                - Dashboard de monitoring disponible sur remote.pupsweb.cc
+                - Optimisations Redis pour le filtrage BPM (plus rapide)
+                -- Historique V2.0.1/V2.0.2 --
+                - Support complet des mods avec syntaxe flexible
+                - Précision ajustable des scores (precis 1-8)
+                - Base de données 50M+ scores
+                - Calcul automatique du PP cible pour rank up
+                - Anti-spam et optimisations diverses
                 `
                 :
-                `-- V2.0.1 Major update of Pupsbot! What has changed ? --
-                - Support of mods! Simply add the desired mods after the command. E.g: ! bm hd dt. By default, Pupsbot will only give you maps without mods. Simply add a + in the command to allow the discovery of maps with mods. If you did not add it but specified one or more mods, only the specified mods will be taken into account.
-                - Improved accuracy of scores. You can require the bot to base on more accurate scores. Simply add "precis x" by replacing the x with a value from 1 to 8.
-                - A much larger database with more than 50 million reference scores.
-                - The addition of the "Rank Up Cible". The Rank Up Cible is simply the number of PP you will need to rank up. It is also used to give maps that will allow you to rank up for sure.
-                -- V2.0.2 FixBug --
-                - Bug fix
-                - Anti Spam
-                - Optimizations
-                - Add Star Rating
-                - Addition of the "NM" mode to have exclusively maps no mods
+                `-- V2.0.3 New Pupsbot Update! --
+                - New advanced filters: pp:XXX and bpm:XXX for ultra-precise recommendations
+                - Example: !o HD pp:200 bpm:180 for HD maps giving ~200pp with ~180 BPM
+                - Fixed score tracking system (was broken for 1+ month)
+                - osu! API V2 integration for better performance
+                - Monitoring dashboard available at remote.pupsweb.cc
+                - Redis optimizations for BPM filtering (faster)
+                -- V2.0.1/V2.0.2 History --
+                - Full mod support with flexible syntax
+                - Adjustable score precision (precis 1-8)
+                - 50M+ scores database
+                - Automatic target PP calculation for rank up
+                - Anti-spam and various optimizations
                 `;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);

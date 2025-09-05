@@ -1,127 +1,259 @@
-const Logger = require('../utils/Logger');
-const ErrorHandler = require('../utils/ErrorHandler');
-const GameModeManager = require('../services/GameModeManager');
-const { getTop100MultiModes, getBeatmap } = require('../services/OsuApiV1');
-const parseCommandParameters = require('../utils/parser/commandParser');
-
+const Performe = require('../services/Performe');
 require('dotenv').config();
 
-const logger = new Logger();
-const errorHandler = new ErrorHandler();
-const gameModeManager = new GameModeManager();
+const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
+const findScoresByPPRange = require('../compute//osu/findScoreByPPRange');
+const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
+const computeTargetPP = require('../compute/osu/targetPP');
+
+const { SendBeatmapMessage, SendNotFoundBeatmapMessage, SendErrorInternal } = require('../utils/messages');
+
+const modsToBitwise = require('../utils/osu/modsToBitwise');
+const parseCommandParameters = require('../utils/parser/osu/bmParser');
+
+const OsuApiWrapper = require('../services/OsuApiWrapper');
+const osuApi = new OsuApiWrapper();
+
+const Thread2Database = require('../services/SQL');
+const Logger = require('../utils/Logger');
+
+const Notifier = require('../services/Notifier');
+const notifier = new Notifier();
+
+const { getUserErrorMessage } = require('../utils/UserFacingError');
+
+
+function filterOutTop100(results, beatmapIdSet) {
+    return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
+}
+function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {
+    const requiredMods = modsToBitwise(requiredModsArray);
+    const neutralModsMask = 32 | 16384;
+
+    return results.filter(score => {
+        const scoreMods = parseInt(score.mods, 10);
+        const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
+        const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
+
+        if (requiredWithoutNeutral === 0 && !isAllowOtherMods) {
+            return scoreModsWithoutNeutral === 0;
+        }
+
+        if (isAllowOtherMods) {
+            return (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
+        } else {
+            return scoreModsWithoutNeutral === requiredWithoutNeutral;
+        }
+    });
+}
+
+function pickBestRandomPrecision(filtered) {
+    for (let precision = 1; precision <= 8; precision++) {
+        const candidates = filtered.filter(s => parseInt(s.precision) === precision);
+        if (candidates.length > 0) {
+            const rand = Math.floor(Math.random() * candidates.length);
+            return candidates[rand];
+        }
+    }
+    return null;
+}
 
 process.on('message', async (data) => {
-    const startTime = Date.now();
-    let response = null;
-    
+    GlobalData = data;
+    const db = new Thread2Database();
+    const performe = new Performe();
+
     try {
-        logger.info('OSU_WORKER', 'Processing osu command request', {
-            user: data.event?.nick,
-            messageId: data.event?.id
-        });
+        await db.connect();
+        await performe.init();
+        const t = performe.startTimer();
+        const startTime = Date.now();
+        const params = parseCommandParameters(data.event.message);
+        const suggestions = await performe.getUserSuggestions(data.user.id);
+        const top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
 
-        if (!data.event || !data.event.message) {
-            throw new Error('Invalid event data received');
-        }
-
-        const params = parseCommandParameters(data.event.message, 'osu');
-        logger.debug('OSU_WORKER', 'Parsed command parameters', { params });
-
-        const mode = gameModeManager.getModeInfo('osu');
-        if (!mode || !mode.enabled) {
-            response = {
+        if (!top100 || !top100.osu || !top100.osu.tr || top100.osu.tr.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
                 username: data.event.nick,
-                response: 'osu! mode is currently not available. Please try again later.',
-                success: false,
-                id: data.event.id
-            };
-            return;
-        }
-
-        gameModeManager.logModeUsage('osu', 'COMMAND_REQUEST', {
-            user: data.event.nick,
-            command: 'osu',
-            parameters: params
-        });
-
-        // Pour l'instant, retournons une suggestion basique basée sur les top scores
-        const userId = data.user?.id || data.event.nick;
-        const topData = await getTop100MultiModes(userId, data.event.id);
-        
-        if (!topData.osu || !topData.osu.possibles || topData.osu.possibles.length === 0) {
-            const locale = data.user?.locale || 'EN';
-            const isFR = locale === 'FR';
-            
-            response = {
-                username: data.event.nick,
-                response: isFR
-                    ? '⭕ Aucun gain PP trouvé ou données insuffisantes pour des suggestions osu!. Essayez de jouer plus de beatmaps ranked.'
-                    : '⭕ No PP gains found or insufficient data for osu! suggestions. Try playing more ranked beatmaps.',
-                success: false,
-                id: data.event.id
-            };
-            return;
-        }
-
-        const locale = data.user?.locale || 'EN';
-        const isFR = locale === 'FR';
-        
-        // Sélectionner un gain PP potentiel
-        const topGains = topData.osu.possibles.slice(0, 10);
-        const randomGain = topGains[Math.floor(Math.random() * topGains.length)];
-        
-        if (randomGain) {
-            response = {
-                username: data.event.nick,
-                response: isFR
-                    ? `⭕ Suggestion osu!: Un score de ${randomGain.brut}pp te ferait gagner +${randomGain.gain}pp (position #${randomGain.position} dans ton top). Continue à t'améliorer !`
-                    : `⭕ osu! suggestion: A ${randomGain.brut}pp score would give you +${randomGain.gain}pp (rank #${randomGain.position} in your top). Keep improving!`,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
                 success: true,
-                id: data.event.id
-            };
-        } else {
-            response = {
+                errorCode: 'ERR_NO_SCORES'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        const top100Osu = top100.osu;
+        const sum = computeCrossModeProgressionPotential(data.user.id, top100);
+
+        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
+        const results = await findScoresByPPRange({ min, max }, params.mods, data);
+
+        if (!results || results.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
                 username: data.event.nick,
-                response: isFR
-                    ? '⭕ Aucune suggestion disponible pour le moment. Essayez de jouer plus de beatmaps ranked.'
-                    : '⭕ No suggestions available right now. Try playing more ranked beatmaps.',
-                success: false,
-                id: data.event.id
-            };
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
         }
 
-    } catch (error) {
-        errorHandler.handleError(error, 'OSU_WORKER', {
-            user: data.event?.nick,
-            messageId: data.event?.id,
-            message: data.event?.message
-        });
+        const targetPP = computeTargetPP(top100Osu.tr, sum);
 
-        const locale = data.user?.locale || 'EN';
-        const isFR = locale === 'FR';
-        
-        response = {
+        let filtered = filterByMods(results, params.mods, params.allowOtherMods);
+        filtered = filterOutTop100(filtered, top100Osu.table)
+            .filter(score => score.precision < 8)
+            .sort((a, b) => b.precision - a.precision);
+
+        if (filtered.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        const t2 = performe.startTimer();
+        const sortList = [];
+
+        for (const score of filtered) {
+            const mapId = parseInt(score.beatmap_id);
+            if (suggestions.includes(mapId.toString())) continue;
+
+            if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
+                sortList.push(score);
+            }
+        }
+
+        await performe.logDuration('SORTO', await t2.stop('SORTO'));
+
+        if (sortList.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        const selected = pickBestRandomPrecision(sortList);
+
+        if (!selected) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        let beatmap;
+        try {
+            beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+            if (!beatmap) {
+                throw new Error('Beatmap not found');
+            }
+        } catch (beatmapError) {
+            Logger.errorCatch('OSU Worker - getBeatmap', beatmapError);
+            const elapsed = Date.now() - startTime;
+            const msg = await SendErrorInternal(data.user.locale, data.event.id);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: selected.beatmap_id,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_BEATMAP_NOT_FOUND'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        const elapsed = Date.now() - startTime;
+        const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
+
+        await performe.logDuration('O', await t.stop('O'));
+        await performe.logCommand(data.user.id, 'O');
+        await performe.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
+
+        process.send({
             username: data.event.nick,
-            response: isFR 
-                ? 'Une erreur s\'est produite lors du traitement de votre commande osu!.'
-                : 'An error occurred while processing your osu! command.',
-            success: false,
-            id: data.event.id
-        };
-
-    } finally {
-        if (response) {
-            process.send(response);
-        }
-
-        const duration = Date.now() - startTime;
-        logger.performance('OSU_WORKER', duration, {
-            user: data.event?.nick,
-            success: response?.success || false
+            response,
+            id: data.event.id,
+            beatmapId: selected.beatmap_id,
+            userId: data.user.id,
+            success: true
         });
 
-        process.removeAllListeners();
+        await performe.addSuggestion(selected.beatmap_id, data.user.id);
+        await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
+    } catch (e) {
+        Logger.errorCatch('OSU Worker', e);
+        await notifier.send(`OSU Worker Error: ${e.toString()}`, 'WORKER.OSU.FAIL');
+
+        try {
+            const locale = data.user?.locale || 'FR';
+            const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
+
+            await performe.logDuration('O', 0);
+            await performe.logCommand(data.user.id, 'O');
+            await performe.close();
+
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_WORKER_CRASH'
+            });
+
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+        } catch (inner) {
+            Logger.errorCatch('OSU Worker → Secondary Failure', inner);
+            await notifier.send(`Double error in worker.o.js: ${inner.toString()}`, 'WORKER.OSU.FAIL2');
+        }
+    } finally {
+        await performe.close();
+        process.removeAllListeners('message');
+        try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();
-        setTimeout(() => process.exit(0), 100);
+        process.exit(0);
     }
 });

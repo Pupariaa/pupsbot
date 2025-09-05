@@ -26,8 +26,8 @@ class IRCQueueManager {
 
         this._blockedUsers = new Map();
 
-        // this._performe = new Performe();
-        // this._performe.init();
+        this._performe = new Performe();
+        this._performe.init();
 
         this._startLoop();
     }
@@ -38,7 +38,7 @@ class IRCQueueManager {
         if (!bypass) {
             if (this._blockedUsers.has(target) && now < this._blockedUsers.get(target)) {
                 if (id && success === false) {
-                    // await this._performe.markCancelled(id);
+                    await this._performe.markCancelled(id);
                 }
                 return;
             }
@@ -67,12 +67,12 @@ class IRCQueueManager {
 
                 for (const task of removed) {
                     if (task.id) {
-                        // await this._performe.markCancelled(task.id);
+                        await this._performe.markCancelled(task.id);
                     }
                 }
 
                 if (id) {
-                    // await this._performe.markCancelled(id);
+                    await this._performe.markCancelled(id);
                 }
 
                 return;
@@ -103,7 +103,7 @@ class IRCQueueManager {
                 const task = this._queue.shift();
 
                 if (task.success === false && task.id) {
-                    // await this._performe.markCancelled(task.id);
+                    await this._performe.markCancelled(task.id);
                     continue;
                 }
 
@@ -118,7 +118,7 @@ class IRCQueueManager {
         try {
             await this._sendFunction(task.target, task.message);
             if (task.id) {
-                // await this._performe.markResolved(task.id);
+                await this._performe.markResolved(task.id);
             }
             task.resolve();
         } catch (error) {

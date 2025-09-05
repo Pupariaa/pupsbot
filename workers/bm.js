@@ -1,17 +1,18 @@
 const Performe = require('../services/Performe');
 require('dotenv').config();
 
-const computeRefinedGlobalPPRange = require('../compute/RefinedGlobalPPRange');
-const findScoresByPPRange = require('../compute/findScoreByPPRange');
-const computeCrossModeProgressionPotential = require('../compute/CrossModeProgressionPotential');
-const computeTargetPP = require('../compute/targetPP');
+const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
+const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
+const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
+const computeTargetPP = require('../compute/osu/targetPP');
 
-const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
+const { SendBeatmapMessage, SendNotFoundBeatmapMessage, SendErrorInternal } = require('../utils/messages');
 
 const modsToBitwise = require('../utils/osu/modsToBitwise');
-const parseCommandParameters = require('../utils/parser/commandParser');
+const parseCommandParameters = require('../utils/parser/osu/bmParser');
 
-const { getTop100MultiMods, getBeatmap } = require('../services/OsuApiV1');
+const OsuApiWrapper = require('../services/OsuApiWrapper');
+const osuApi = new OsuApiWrapper();
 
 const Thread2Database = require('../services/SQL');
 const Logger = require('../utils/Logger');
@@ -21,7 +22,6 @@ const notifier = new Notifier();
 
 const { getUserErrorMessage } = require('../utils/UserFacingError');
 
-let GlobalData = null;
 
 function filterOutTop100(results, beatmapIdSet) {
     return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
@@ -69,20 +69,69 @@ process.on('message', async (data) => {
         const t = performe.startTimer();
         const startTime = Date.now();
         const params = parseCommandParameters(data.event.message);
-        console.log(params)
         const suggestions = await performe.getUserSuggestions(data.user.id);
-        const top100 = await getTop100MultiMods(data.user.id, data.event.id);
+        const top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+
+        if (!top100 || !top100.osu || !top100.osu.tr || top100.osu.tr.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_SCORES'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
         const top100Osu = top100.osu;
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
 
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
         const results = await findScoresByPPRange({ min, max }, params.mods, data);
+
+        if (!results || results.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
         const targetPP = computeTargetPP(top100Osu.tr, sum);
 
         let filtered = filterByMods(results, params.mods, params.allowOtherMods);
         filtered = filterOutTop100(filtered, top100Osu.table)
             .filter(score => score.precision < 8)
             .sort((a, b) => b.precision - a.precision);
+
+        if (filtered.length === 0) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
 
         const t2 = performe.startTimer();
         const sortList = [];
@@ -98,11 +147,9 @@ process.on('message', async (data) => {
 
         await performe.logDuration('SORTBM', await t2.stop('SORTBM'));
 
-        const selected = pickBestRandomPrecision(sortList);
-
-        if (!selected) {
+        if (sortList.length === 0) {
             const elapsed = Date.now() - startTime;
-            const msg = getUserErrorMessage('ERR_NO_BEATMAP', data.user.locale);
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
                 response: msg,
@@ -116,9 +163,49 @@ process.on('message', async (data) => {
             return;
         }
 
-        const beatmap = await getBeatmap(selected.beatmap_id);
+        const selected = pickBestRandomPrecision(sortList);
+
+        if (!selected) {
+            const elapsed = Date.now() - startTime;
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: 0,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_NO_BEATMAP'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
+        let beatmap;
+        try {
+            beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+            if (!beatmap) {
+                throw new Error('Beatmap not found');
+            }
+        } catch (beatmapError) {
+            Logger.errorCatch('OSU Worker - getBeatmap', beatmapError);
+            const elapsed = Date.now() - startTime;
+            const msg = await SendErrorInternal(data.user.locale, data.event.id);
+            process.send({
+                username: data.event.nick,
+                response: msg,
+                id: data.event.id,
+                beatmapId: selected.beatmap_id,
+                userId: data.user.id,
+                success: true,
+                errorCode: 'ERR_BEATMAP_NOT_FOUND'
+            });
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            return;
+        }
+
         const elapsed = Date.now() - startTime;
-        const response = SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
+        const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
 
         await performe.logDuration('BM', await t.stop('BM'));
         await performe.logCommand(data.user.id, 'BM');
@@ -136,8 +223,8 @@ process.on('message', async (data) => {
         await performe.addSuggestion(selected.beatmap_id, data.user.id);
         await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
     } catch (e) {
-        Logger.errorCatch('Bm Worker', e);
-        await notifier.send(`BM Worker Error: ${e.toString()}`, 'WORKER.BM.FAIL');
+        Logger.errorCatch('OSU Worker', e);
+        await notifier.send(`OSU Worker Error: ${e.toString()}`, 'WORKER.OSU.FAIL');
 
         try {
             const locale = data.user?.locale || 'FR';
@@ -157,10 +244,10 @@ process.on('message', async (data) => {
                 errorCode: 'ERR_WORKER_CRASH'
             });
 
-            await db.setHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
         } catch (inner) {
-            Logger.errorCatch('Bm Worker → Secondary Failure', inner);
-            await notifier.send(`Double error in worker.bm.js: ${inner.toString()}`, 'WORKER.BM.FAIL2');
+            Logger.errorCatch('OSU Worker → Secondary Failure', inner);
+            await notifier.send(`Double error in worker.bm.js: ${inner.toString()}`, 'WORKER.OSU.FAIL2');
         }
     } finally {
         await performe.close();

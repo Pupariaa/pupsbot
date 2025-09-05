@@ -93,7 +93,7 @@ process.on('message', async (data) => {
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
 
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
-        const results = await findScoresByPPRange({ min, max }, params.mods, data);
+        const results = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
 
         if (!results || results.length === 0) {
             const elapsed = Date.now() - startTime;
@@ -141,7 +141,17 @@ process.on('message', async (data) => {
             const mapId = parseInt(score.beatmap_id);
             if (suggestions.includes(mapId.toString())) continue;
 
-            if (!targetPP || (parseFloat(score.pp) >= targetPP && parseFloat(score.pp) <= targetPP + 28)) {
+            const scorePP = parseFloat(score.pp);
+            let shouldInclude = false;
+
+            if (params.pp !== null) {
+                const ppMargin = 15;
+                shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
+            } else {
+                shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+            }
+
+            if (shouldInclude) {
                 sortList.push(score);
             }
         }

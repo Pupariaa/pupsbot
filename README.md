@@ -88,6 +88,28 @@ Pupsbot supports 4 syntaxes for controlling which mods are used in the recommend
 
 ---
 
+### Advanced Filters
+
+Pupsbot supports additional filtering parameters to fine-tune your recommendations:
+
+<div align="center">
+
+| Parameter | Description | Example |
+|-----------|-------------|---------|
+| `pp:XXX` | Filter maps that give approximately XXX pp (±15 pp tolerance) | `!o HD pp:200` |
+| `bpm:XXX` | Filter maps with approximately XXX BPM (±10 BPM tolerance) | `!o DT bpm:180` |
+
+</div>
+
+**Examples:**
+- `!o HD pp:150` - Hidden maps that give around 150pp
+- `!o DT bpm:160` - DoubleTime maps with around 160 BPM
+- `!o HR pp:200 bpm:180` - HardRock maps giving ~200pp with ~180 BPM
+
+**Note:** The `pp:` parameter overrides the automatic target PP calculation, allowing you to search for specific PP ranges.
+
+---
+
 ## Other Commands
 
 ### `!release`

@@ -32,7 +32,9 @@ The dashboard provides:
 - **Error tracking** and debugging information
 
 Perfect for monitoring bot reliability and understanding usage patterns!
-
+<p align="center">
+<a href="https://remote.pupsweb.cc">Go to Live Dashboards and Metrics usages</a>
+</p>
 ---
 
 ## Overview

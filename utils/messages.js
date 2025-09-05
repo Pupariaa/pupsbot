@@ -1,8 +1,28 @@
 const { formatTime } = require('./functions');
 const osu_utils = require('osu-utils');
 const osuUtils = new osu_utils();
+const OsuApiWrapper = require('../services/OsuApiWrapper');
 
-function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTokens, unsupportedMods) {
+let osuApi = null;
+function getOsuApi() {
+    if (!osuApi) {
+        osuApi = new OsuApiWrapper();
+    }
+    return osuApi;
+}
+
+
+async function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTokens, unsupportedMods) {
+
+    let realSR = null;
+    try {
+        const apiWrapper = getOsuApi();
+        const srData = await apiWrapper.getBeatmapStarRating(selected.beatmap_id, selected.mods, 'osu');
+        realSR = srData.star_rating;
+    } catch (error) {
+        realSR = parseFloat(beatmapInfo.difficultyrating) || parseFloat(selected.stars) || 0;
+    }
+
     const { cs, od, hp, ar, bpm, length } = osuUtils.ConvertStatsWithMods({
         cs: selected.cs,
         od: selected.od,
@@ -16,7 +36,7 @@ function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTok
     const linkScore = `[https://osu.ppy.sh/scores/osu/${selected.scoreId} ${locale === 'FR' ? 'ce score' : 'that score'}]`;
     const linkBeatmap = `[https://osu.ppy.sh/b/${selected.beatmap_id} ${selected.title} - ${selected.artist}]`;
     const ppText = `${parseFloat(selected.pp).toFixed(0)} PP`;
-    const stars = `${parseFloat(beatmapInfo.difficultyrating).toFixed(2)} ★ (NM)`;
+    const stars = `${parseFloat(realSR).toFixed(2)} ★`;
     const stats = `AR${ar} CS${cs} OD${od} HP${hp}`;
     const target = `${targetPP || '?'}PP`;
 
@@ -60,15 +80,13 @@ function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTok
     return `${infoPrefix}${messageBody}`;
 }
 
-
-
-function buildNotFoundMessage(locale) {
+async function buildNotFoundMessage(locale) {
     return locale === 'FR'
         ? `Je suis désolé mais je n'ai pas trouvé de beatmap avec ces critères.`
         : `I’m sorry but I couldn’t find a beatmap with these criteria.`;
 }
 
-function buildInternalError(locale, id) {
+async function buildInternalError(locale, id) {
     return locale === 'FR'
         ? `Quelque chose s'est mal passé.. Si cela se reproduit, merci de me contacter sur Discord "Puparia" avec ce code: ${id}`
         : `Something went wrong. If this happens again, please contact me on Discord "Puparia" with this code: ${id}`;

@@ -7,7 +7,7 @@ class OsuIRCClient {
         password,
         channel = "#osu",
         host = "irc.ppy.sh",
-        port = 6697,
+        port = 6667,
         maxRetries = 5,
         retryDelayMs = 5000
     }, notifier) {
@@ -15,20 +15,12 @@ class OsuIRCClient {
         this.channel = channel;
         this.notifier = notifier;
 
-        // IRC ne supporte pas les espaces dans les nicks, on les remplace par des underscores
-        const cleanNick = username.replace(/\s+/g, '_');
-        
         this.connectionConfig = {
             host,
-            port: 6667, // Utiliser le port non-SSL qui fonctionne
-            nick: cleanNick,
-            username: cleanNick,
-            realname: username,
+            port,
+            nick: username,
             password,
-            tls: false,
-            auto_reconnect: false,
-            ping_interval: 30,
-            ping_timeout: 120
+            auto_reconnect: false
         };
 
         this.maxRetries = maxRetries;
@@ -39,51 +31,26 @@ class OsuIRCClient {
     }
 
     async connect() {
-        Logger.irc(`Connecting to osu! IRC at ${this.connectionConfig.host}:${this.connectionConfig.port} as ${this.connectionConfig.nick} (TLS: ${this.connectionConfig.tls})`);
-
-        if (!this._handlersBound) {
-            this._bindEventHandlers();
-        }
+        Logger.irc("Connecting to osu! IRC...");
 
         try {
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Connection timeout after 15 seconds'));
-                }, 15000);
-
-                this.client.once('registered', () => {
-                    clearTimeout(timeout);
-                    resolve();
-                });
-
-                this.client.once('error', (error) => {
-                    clearTimeout(timeout);
-                    reject(error);
-                });
-
-                this.client.connect(this.connectionConfig);
-            });
+            this.client.connect(this.connectionConfig);
         } catch (error) {
             Logger.ircError(`Initial connection error: ${error.message}`);
             await this._handleConnectionFailure(error);
-            throw error;
+        }
+
+        if (!this._handlersBound) {
+            this._bindEventHandlers();
         }
     }
 
     _bindEventHandlers() {
         this.client.on("registered", async () => {
-            Logger.irc(`Successfully registered to osu! IRC as ${this.connectionConfig.nick}`);
+            Logger.irc("Successfully connected to osu! IRC.");
             this.joinChannel(this.channel);
             this.retryCount = 0;
             await this.notifier.send("Bot successfully connected to osu! IRC", "IRC.REGISTERED");
-        });
-
-        this.client.on("connecting", () => {
-            Logger.irc("Attempting to connect to IRC server...");
-        });
-
-        this.client.on("connected", () => {
-            Logger.irc("TCP connection established to IRC server");
         });
 
         this.client.on("error", async (error) => {
@@ -96,16 +63,10 @@ class OsuIRCClient {
             await this.notifier.send(`Socket error on IRC connection: ${error.message}`, "IRC.SOCKET");
         });
 
-        this.client.on("close", async (reason) => {
-            Logger.ircError(`IRC connection was closed. Reason: ${reason || 'Unknown'}`);
-            await this.notifier.send(`IRC connection closed: ${reason || 'Unknown'}. Attempting to reconnect...`, "IRC.DISCONNECTED");
+        this.client.on("close", async () => {
+            Logger.ircError("IRC connection was closed.");
+            await this.notifier.send("IRC connection closed. Attempting to reconnect...", "IRC.DISCONNECTED");
             await this._attemptReconnect();
-        });
-
-        this.client.on("raw", (line) => {
-            if (line.command === 'ERROR') {
-                Logger.ircError(`IRC server error: ${line.params ? line.params.join(' ') : 'Unknown error'}`);
-            }
         });
 
         this._handlersBound = true;

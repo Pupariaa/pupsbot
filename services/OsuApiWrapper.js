@@ -13,20 +13,16 @@ class OsuApiWrapper {
     async checkV2Availability() {
         try {
             if (!process.env.OSU_CLIENT_ID || !process.env.OSU_CLIENT_SECRET) {
-                Logger.service(`OsuApiWrapper: V2 credentials not found (CLIENT_ID: ${!!process.env.OSU_CLIENT_ID}, CLIENT_SECRET: ${!!process.env.OSU_CLIENT_SECRET}), using V1`);
+                Logger.service(`OsuApiWrapper: V2 credentials not found, using V1`);
                 this.v2Available = false;
                 return;
             }
-
-            this.osuApiV2 = new OsuApiV2();
-            const isHealthy = await this.osuApiV2.healthCheck();
-            if (isHealthy) {
-                this.v2Available = true;
-                Logger.service('OsuApiWrapper: V2 available and healthy');
-            } else {
-                this.v2Available = false;
-                Logger.service('OsuApiWrapper: V2 not healthy, falling back to V1');
+            if (!this.osuApiV2) {
+                this.osuApiV2 = new OsuApiV2();
             }
+
+            this.v2Available = true;
+            Logger.service('OsuApiWrapper: V2 initialized and ready');
         } catch (error) {
             this.v2Available = false;
             Logger.errorCatch('OsuApiWrapper', `V2 initialization failed: ${error.message}`);
@@ -34,7 +30,7 @@ class OsuApiWrapper {
         }
     }
     forceV1() {
-        this.preferV2 = false;
+        this.preferV2 = true;
         Logger.service('OsuApiWrapper: Forced to use V1');
     }
     forceV2() {
@@ -186,6 +182,7 @@ class OsuApiWrapper {
             throw new Error('Batch Star Rating with mods requires API V2 (not available in V1)');
         }
     }
+
 }
 
 module.exports = OsuApiWrapper;

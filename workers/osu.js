@@ -211,6 +211,7 @@ process.on('message', async (data) => {
         await performe.logDuration('O', await t.stop('O'));
         await performe.logCommand(data.user.id, 'O');
         await performe.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
+        await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP);
 
         process.send({
             username: data.event.nick,

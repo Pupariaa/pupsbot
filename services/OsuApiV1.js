@@ -1,5 +1,6 @@
 const axios = require('axios');
 const Performe = require('./Performe');
+const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
 
@@ -167,8 +168,19 @@ async function hasUserPlayedMap(userId, beatmapId) {
         const response = await axios.get('https://osu.ppy.sh/api/get_scores', { params });
         const scores = response.data;
 
-        if (!Array.isArray(scores)) return false;
-        return scores.length > 0;
+        if (!Array.isArray(scores) || scores.length === 0) {
+            return false;
+        }
+
+        const latestScore = scores[0];
+        return {
+            date: latestScore.date,
+            pp: parseFloat(latestScore.pp) || 0,
+            score: latestScore.score,
+            maxcombo: latestScore.maxcombo,
+            rank: latestScore.rank,
+            enabled_mods: latestScore.enabled_mods
+        };
     } catch (err) {
         Logger.errorCatch('OsuApiV1', `Error checking if user played beatmap ${beatmapId}`, err);
         return false;

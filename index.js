@@ -131,7 +131,7 @@ async function refreshTrackers(performe) {
                 const windowStart = suggestionStart - 20 * 60 * 1000;
                 const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
                 if (scoreDate >= windowStart && scoreDate <= windowEnd) {
-                    await db.updateSug(id, played.pp);
+                    await db.updateSuggestion(id, played.pp);
                     Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp} for ID:${id}`);
                 } else {
                     if (retries < 1) {
@@ -275,8 +275,6 @@ ircBot?.onMessage(async (event) => {
         Logger.errorCatch('onMessage', err);
     }
 });
-
-
 
 
 

@@ -2,16 +2,17 @@ const Performe = require('../services/Performe');
 require('dotenv').config();
 
 const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
-const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
+const findScoresByPPRange = require('../compute//osu/findScoreByPPRange');
 const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
 const computeTargetPP = require('../compute/osu/targetPP');
 
 const { SendBeatmapMessage, SendNotFoundBeatmapMessage, SendErrorInternal } = require('../utils/messages');
 
 const modsToBitwise = require('../utils/osu/modsToBitwise');
-const parseCommandParameters = require('../utils/parser/osu/bmParser');
+const parseCommandParameters = require('../utils/parser/bmParser');
 
 const OsuApiWrapper = require('../services/OsuApiWrapper');
+const OsuApiV1 = require('../services/OsuApiV1');
 const osuApi = new OsuApiWrapper();
 
 const Thread2Database = require('../services/SQL');
@@ -183,7 +184,7 @@ process.on('message', async (data) => {
 
         let beatmap;
         try {
-            beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+            beatmap = await OsuApiV1.getBeatmap(selected.beatmap_id);
             if (!beatmap) {
                 throw new Error('Beatmap not found');
             }

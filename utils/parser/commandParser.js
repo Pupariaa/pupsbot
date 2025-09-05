@@ -42,6 +42,8 @@ function parseCommandParameters(message, gamemode) {
     const mods = new Set();
     const unsupportedMods = [];
     const unknownTokens = [];
+    // let bpm = null;
+    // let pp = null;
     let precision = null;
 
     const tokens = input.replace(/[^\w:+]/g, ' ').split(/\s+/).filter(Boolean);
@@ -54,6 +56,20 @@ function parseCommandParameters(message, gamemode) {
             precision = parseInt(precisionMatch[1], 10);
             continue;
         }
+
+        // Parse bpm:xxx (integer)
+        // const bpmMatch = token.match(/^BPM[:]?(\d+)$/);
+        // if (bpmMatch) {
+        //     bpm = parseInt(bpmMatch[1], 10);
+        //     continue;
+        // }
+
+        // // Parse pp:xxx (integer)
+        // const ppMatch = token.match(/^PP[:]?(\d+)$/);
+        // if (ppMatch) {
+        //     pp = parseInt(ppMatch[1], 10);
+        //     continue;
+        // }
 
         const mapped = allKnownMods[token];
         if (mapped) {
@@ -111,6 +127,8 @@ function parseCommandParameters(message, gamemode) {
         mods: Array.from(mods),
         precis: precision !== null ? [precision] : [1, 2, 3, 4],
         parameters: rawArgs.trim(),
+        // bpm,
+        // pp,
         unsupportedMods,
         unknownTokens
     };

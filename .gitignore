@@ -4,3 +4,5 @@ node_modules/
 .sql
 .redis
 osu_token.json
+logs/application.log
+.vscode/settings.json

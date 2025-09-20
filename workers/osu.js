@@ -1,4 +1,4 @@
-const Performe = require('../services/Performe');
+const RedisStore = require('../services/RedisStore');
 require('dotenv').config();
 
 const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
@@ -62,7 +62,7 @@ function pickBestRandomPrecision(filtered) {
 process.on('message', async (data) => {
     GlobalData = data;
     const db = new Thread2Database();
-    const performe = new Performe();
+    const performe = new RedisStore();
 
     try {
         await db.connect();

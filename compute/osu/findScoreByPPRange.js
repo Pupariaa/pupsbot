@@ -1,8 +1,8 @@
 const RedisManager = require('../../services/Redis');
-const Performe = require('../../services/Performe');
+const RedisStore = require('../../services/RedisStore');
 
 async function findScoresByPPRange(range, mods, id, bpm = null) {
-    const performe = new Performe();
+    const performe = new RedisStore();
     await performe.init();
     const t = performe.startTimer();
     if (!range || typeof range.min !== 'number' || typeof range.max !== 'number') {

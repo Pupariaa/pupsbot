@@ -3,7 +3,7 @@ const os = require('os');
 const OsuIRCClient = require("./services/IRC");
 const IRCQueueManager = require("./services/Queue");
 const CommandManager = require('./services/Commands');
-const Performe = require('./services/Performe');
+const RedisStore = require('./services/RedisStore');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
 const { getUser, hasUserPlayedMap } = require('./services/OsuApiV1');
 const Logger = require('./utils/Logger');
@@ -14,93 +14,93 @@ const Notifier = require('./services/Notifier');
 const notifier = new Notifier();
 
 
-const performe = new Performe();
+const performe = new RedisStore();
 const db = new SQL();
 performe.init();
 global.temp = [];
 const trackers = [];
 
 
-const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
+// const { monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks');
 
-const loopDelay = monitorEventLoopDelay({ resolution: 10 });
-loopDelay.enable();
+// const loopDelay = monitorEventLoopDelay({ resolution: 10 });
+// loopDelay.enable();
 
-const gcTypes = {
-    [constants.NODE_PERFORMANCE_GC_MAJOR]: 'major',
-    [constants.NODE_PERFORMANCE_GC_MINOR]: 'minor',
-    [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: 'incremental',
-    [constants.NODE_PERFORMANCE_GC_WEAKCB]: 'weakcb'
-};
+// const gcTypes = {
+//     [constants.NODE_PERFORMANCE_GC_MAJOR]: 'major',
+//     [constants.NODE_PERFORMANCE_GC_MINOR]: 'minor',
+//     [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: 'incremental',
+//     [constants.NODE_PERFORMANCE_GC_WEAKCB]: 'weakcb'
+// };
 
-const gcLog = [];
-const gcObserver = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-        gcLog.push({ type: gcTypes[entry.kind] || 'unknown', duration: entry.duration });
-    }
-});
-gcObserver.observe({ entryTypes: ['gc'] });
+// const gcLog = [];
+// const gcObserver = new PerformanceObserver((list) => {
+//     for (const entry of list.getEntries()) {
+//         gcLog.push({ type: gcTypes[entry.kind] || 'unknown', duration: entry.duration });
+//     }
+// });
+// gcObserver.observe({ entryTypes: ['gc'] });
 
-async function getCPUUsagePercent(durationMs = 100) {
-    const startUsage = process.cpuUsage();
-    const startTime = process.hrtime();
+// async function getCPUUsagePercent(durationMs = 100) {
+//     const startUsage = process.cpuUsage();
+//     const startTime = process.hrtime();
 
-    await new Promise(resolve => setTimeout(resolve, durationMs));
+//     await new Promise(resolve => setTimeout(resolve, durationMs));
 
-    const elapTime = process.hrtime(startTime);
-    const elapUsage = process.cpuUsage(startUsage);
+//     const elapTime = process.hrtime(startTime);
+//     const elapUsage = process.cpuUsage(startUsage);
 
-    const elapTimeMs = (elapTime[0] * 1000) + (elapTime[1] / 1e6);
-    const elapUserMs = elapUsage.user / 1000;
-    const elapSysMs = elapUsage.system / 1000;
-    const totalCPUms = elapUserMs + elapSysMs;
+//     const elapTimeMs = (elapTime[0] * 1000) + (elapTime[1] / 1e6);
+//     const elapUserMs = elapUsage.user / 1000;
+//     const elapSysMs = elapUsage.system / 1000;
+//     const totalCPUms = elapUserMs + elapSysMs;
 
-    const cores = os.cpus().length;
-    const cpuPercent = (totalCPUms / (elapTimeMs * cores)) * 100;
+//     const cores = os.cpus().length;
+//     const cpuPercent = (totalCPUms / (elapTimeMs * cores)) * 100;
 
-    return {
-        userCPU: elapUserMs.toFixed(2),
-        systemCPU: elapSysMs.toFixed(2),
-        cpuPercent: cpuPercent.toFixed(2)
-    };
-}
+//     return {
+//         userCPU: elapUserMs.toFixed(2),
+//         systemCPU: elapSysMs.toFixed(2),
+//         cpuPercent: cpuPercent.toFixed(2)
+//     };
+// }
 
-setInterval(() => {
-    try {
-        const mem = process.memoryUsage();
-        const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
-        const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
-        const externalMB = (mem.external / 1024 / 1024).toFixed(2);
+// setInterval(() => {
+//     try {
+//         const mem = process.memoryUsage();
+//         const heapUsedMB = (mem.heapUsed / 1024 / 1024).toFixed(2);
+//         const rssMB = (mem.rss / 1024 / 1024).toFixed(2);
+//         const externalMB = (mem.external / 1024 / 1024).toFixed(2);
 
-        const res = process.resourceUsage();
-        const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
+//         const res = process.resourceUsage();
+//         const maxRSSMB = (res.maxRSS / 1024).toFixed(2);
 
-        const lagMean = loopDelay.mean / 1e6;
-        const lagMax = loopDelay.max / 1e6;
-        const lagStddev = loopDelay.stddev / 1e6;
+//         const lagMean = loopDelay.mean / 1e6;
+//         const lagMax = loopDelay.max / 1e6;
+//         const lagStddev = loopDelay.stddev / 1e6;
 
-        const recentGCs = gcLog.splice(0, gcLog.length);
-        const gcSummary = recentGCs.length
-            ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
-            : 'none';
+//         const recentGCs = gcLog.splice(0, gcLog.length);
+//         const gcSummary = recentGCs.length
+//             ? recentGCs.map(gc => `${gc.type} (${gc.duration.toFixed(1)}ms)`).join(', ')
+//             : 'none';
 
-        performe.logDuration('HEAP', heapUsedMB);
-        performe.logDuration('RSS', rssMB);
-        performe.logDuration('HEAPEXT', externalMB);
-        performe.logDuration('MRSS', maxRSSMB);
-        performe.logDuration('ELOOPLMEN', lagMean.toFixed(2));
-        performe.logDuration('ELOOPLMAX', lagMax.toFixed(2));
-        performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2));
-        performe.logDuration('GCOL', gcSummary);
+//         performe.logDuration('HEAP', heapUsedMB);
+//         performe.logDuration('RSS', rssMB);
+//         performe.logDuration('HEAPEXT', externalMB);
+//         performe.logDuration('MRSS', maxRSSMB);
+//         performe.logDuration('ELOOPLMEN', lagMean.toFixed(2));
+//         performe.logDuration('ELOOPLMAX', lagMax.toFixed(2));
+//         performe.logDuration('ELOOPLDTDDEV', lagStddev.toFixed(2));
+//         performe.logDuration('GCOL', gcSummary);
 
-        getCPUUsagePercent().then(res => {
-            performe.logDuration('UCPU', res.userCPU);
-            performe.logDuration('SCPU', res.systemCPU);
-        });
-    } catch (err) {
-        Logger.errorCatch('MonitorInterval', err);
-    }
-}, 1000);
+//         getCPUUsagePercent().then(res => {
+//             performe.logDuration('UCPU', res.userCPU);
+//             performe.logDuration('SCPU', res.systemCPU);
+//         });
+//     } catch (err) {
+//         Logger.errorCatch('MonitorInterval', err);
+//     }
+// }, 1000);
 
 
 async function refreshTrackers(performe) {

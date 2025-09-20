@@ -1,13 +1,13 @@
 const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const fork = require('child_process').fork;
-const Performe = require('../services/Performe');
+const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
 
 module.exports = {
     name: 'fb',
     async execute(event, args, queue) {
-        const performe = new Performe();
+        const performe = new RedisStore();
         const db = new Thread2Database();
         try {
             await performe.markPending(event.id);

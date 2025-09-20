@@ -1,6 +1,6 @@
 const axios = require('axios');
 const OsuAuth = require('./OsuAuth');
-const Performe = require('./Performe');
+const RedisStore = require('./RedisStore');
 const Notifier = require('./Notifier');
 const Logger = require('../utils/Logger');
 
@@ -22,7 +22,7 @@ class OsuApiV2 {
         }
     }
     async makeAuthenticatedRequest(endpoint, options = {}, operationName = 'API_REQUEST') {
-        const performe = new Performe();
+        const performe = new RedisStore();
         let duration = null;
 
         try {
@@ -233,7 +233,7 @@ class OsuApiV2 {
     async getTopScoresAllModes(userId, id) {
         const modes = ['osu', 'taiko', 'fruits', 'mania'];
         const modeNames = ['osu', 'taiko', 'catch', 'mania'];
-        const performe = new Performe();
+        const performe = new RedisStore();
         let duration = null;
 
         try {

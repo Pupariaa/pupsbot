@@ -1,13 +1,13 @@
 const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
-const Performe = require('../services/Performe');
+const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
 
 module.exports = {
     name: 'support',
     async execute(event, args, queue) {
         const db = new Thread2Database();
-        const performe = new Performe();
+        const performe = new RedisStore();
 
         try {
             await db.connect();

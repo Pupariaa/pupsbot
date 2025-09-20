@@ -1,13 +1,13 @@
 const { getUser } = require('../services/OsuApiV1');
 const fork = require('child_process').fork;
-const Performe = require('../services/Performe');
+const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
 
 
 module.exports = {
     name: 'o',
     async execute(event, args, queue) {
-        const performe = new Performe();
+        const performe = new RedisStore();
         try {
             await performe.markPending(event.id);
             const child = fork((__dirname, '..', 'workers/osu.js'));

@@ -1,4 +1,4 @@
-const Performe = require('./Performe');
+const RedisStore = require('./RedisStore');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
@@ -26,7 +26,7 @@ class IRCQueueManager {
 
         this._blockedUsers = new Map();
 
-        this._performe = new Performe();
+        this._performe = new RedisStore();
         this._performe.init();
 
         this._startLoop();

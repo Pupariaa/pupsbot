@@ -1,7 +1,7 @@
-const Performe = require('../../services/Performe');
+const RedisStore = require('../../services/RedisStore');
 
 async function computeRefinedGlobalPPRange(userPP, topScores, id, progressionData = null) {
-    const performe = new Performe();
+    const performe = new RedisStore();
     await performe.init();
     const t = performe.startTimer();
     const now = Date.now();

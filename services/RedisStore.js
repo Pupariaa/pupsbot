@@ -1,6 +1,6 @@
 const RedisManager = require('./Redis');
 const Logger = require('../utils/Logger');
-const Notifier = require('../services/Notifier');
+const Notifier = require('./Notifier');
 const notifier = new Notifier();
 
 class Performe {

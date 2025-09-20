@@ -1,12 +1,12 @@
 const axios = require('axios');
-const Performe = require('./Performe');
+const RedisStore = require('./RedisStore');
 
 async function getUser(username, id) {
 
     if (!process.env.OSU_API_KEY) {
         throw new Error(`${new Date().toLocaleString('fr-FR')} ${id} Missing OSU_API_KEY in environment variables.`);
     }
-    const performe = new Performe();
+    const performe = new RedisStore();
     await performe.init();
     const t = performe.startTimer();
     const { data } = await axios.get(`https://osu.ppy.sh/api/get_user?k=${process.env.OSU_API_KEY}&u=${username}&m=0`);
@@ -26,7 +26,7 @@ async function getTop100MultiMods(userId, id) {
 
     const modes = ['0', '1', '2', '3'];
     const modeNames = ['osu', 'taiko', 'catch', 'mania'];
-    const performe = new Performe();
+    const performe = new RedisStore();
     await performe.init();
     const t = performe.startTimer();
 
@@ -106,7 +106,7 @@ async function getBeatmap(bid) {
     if (!process.env.OSU_API_KEY) {
         throw new Error(`${new Date().toLocaleString('fr-FR')} Missing OSU_API_KEY in environment variables.`);
     }
-    const performe = new Performe();
+    const performe = new RedisStore();
     await performe.init();
     const t = performe.startTimer();
     const { data } = await axios.get(`https://osu.ppy.sh/api/get_beatmaps?k=${process.env.OSU_API_KEY}&b=${bid}`);

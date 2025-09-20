@@ -1,5 +1,5 @@
 const axios = require('axios');
-const Performe = require('./Performe');
+const RedisStore = require('./RedisStore');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
@@ -11,7 +11,7 @@ async function getUser(username, id) {
         throw new Error(msg);
     }
 
-    const performe = new Performe();
+    const performe = new RedisStore();
     let duration = null;
 
     try {
@@ -44,7 +44,7 @@ async function getTop100MultiMods(userId, id) {
 
     const modes = ['0', '1', '2', '3'];
     const modeNames = ['osu', 'taiko', 'catch', 'mania'];
-    const performe = new Performe();
+    const performe = new RedisStore();
     let duration = null;
 
     try {
@@ -132,7 +132,7 @@ async function getBeatmap(bid) {
         throw new Error(msg);
     }
 
-    const performe = new Performe();
+    const performe = new RedisStore();
     let duration = null;
 
     try {

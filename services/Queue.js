@@ -2,6 +2,7 @@ const RedisStore = require('./RedisStore');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
+const MetricsCollector = require('../services/MetricsCollector');
 
 class IRCQueueManager {
     constructor(sendFunction, options = {}) {
@@ -29,6 +30,7 @@ class IRCQueueManager {
         this._performe = new RedisStore();
         this._performe.init();
 
+        this._metricsCollector = new MetricsCollector();
         this._startLoop();
     }
 
@@ -113,12 +115,14 @@ class IRCQueueManager {
     }
 
     async _processTask(task) {
+        await this._metricsCollector.init();
         this._activeCount++;
 
         try {
             await this._sendFunction(task.target, task.message);
             if (task.id) {
                 await this._performe.markResolved(task.id);
+                await this._metricsCollector.finalizeCommand(task.id, 'completed');
             }
             task.resolve();
         } catch (error) {
@@ -127,6 +131,7 @@ class IRCQueueManager {
                 this._queue.push(task);
             } else {
                 Logger.taskError(`Failed to send message to ${task.target}: ${error.message}`);
+                await this._metricsCollector.finalizeCommand(task.id, 'failed');
                 await notifier.send(
                     `Failed to send IRC message to ${task.target} after ${this._maxRetries} attempts.\nMessage: "${task.message}"\nError: ${error.message}`,
                     'IRCQUEUE.FAILURE'

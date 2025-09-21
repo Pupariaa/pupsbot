@@ -1,52 +1,41 @@
 const { getUser } = require('../services/OsuApiV1');
-const fork = require('child_process').fork;
+const Thread2Database = require('../services/SQL');
 const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
+const MetricsCollector = require('../services/MetricsCollector');
 
 module.exports = {
     name: 'bm',
     async execute(event, args, queue) {
         const performe = new RedisStore();
+        const db = new Thread2Database();
+        const metricsCollector = new MetricsCollector();
+
         try {
+            await metricsCollector.init();
+            await metricsCollector.createCommandEntry(event.id, 'bm');
             await performe.markPending(event.id);
-            const child = fork((__dirname, '..', 'workers/bm.js'));
-            const user = await getUser(event.nick);
+            await db.connect();
 
-            child.send({ event, user });
+            const u = await getUser(event.nick);
+            const responseMessage = u.locale === 'FR'
+                ? `Commande remplacée, utilise plutôt !o`
+                : `Replaced command, use !o instead`;
 
-            child.on('message', async (msgFromWorker) => {
-                if (msgFromWorker && msgFromWorker.username && msgFromWorker.response) {
-                    await queue.addToQueue(
-                        msgFromWorker.username,
-                        msgFromWorker.response,
-                        false,
-                        msgFromWorker.id,
-                        msgFromWorker.success
-                    );
-                    if (!global.temp.includes(msgFromWorker.username)) {
-
-                        const responseMessage = user.locale === 'FR'
-                            ? `Si tu le souhaite, je t'invite à donner ton retour constructif de Pupsbot ! Fait simplement !fb <retour>. Merci d'avance ♥`
-                            : `If you wish, I invite you to give constructive feedback on Pupsbot! Simply !fb <feedback>. Thanks in advance ♥`;
-                        // const responseMessage = user.locale === 'FR'
-                        //     ? `Pupsbot est un bot très gourmand en ressources que je développe avec passion, mais les coûts de serveurs et de matériel restent inévitables [https://ko-fi.com/pupsbot Supporte le sur Ko-fi] Merci ♥`
-                        //     : `Pupsbot is a resource-intensive bot I passionately maintain, but server and hardware costs remain unavoidable [https://ko-fi.com/pupsbot Support it on Ko-fi] Thanks u ♥ `;
-                        await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-                        global.temp.push(msgFromWorker.username);
-
-                    }
-
-                    const responseMessage = user.locale === 'FR'
-                        ? `La commande !bm est obsolète. Utilise !o à la place — elle devient la norme pour osu! (multi-mode en approche).`
-                        : `The !bm command is deprecated. Please use !o instead — it's the new standard for osu! beatmap queries (multi-mode incoming).`;
-
-                    await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-                    child.kill();
-                }
-            });
-        } catch (e) {
-            Logger.errorCatch('bm', e);
-            await queue.addToQueue(event.nick, "An error occurred while executing the bm command.", false, event.id, false);
+            await queue.addToQueue(event.nick, responseMessage, true, event.id, true);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await metricsCollector.updateCommandResult(event.id, 'success');
+        } catch (err) {
+            Logger.errorCatch('Command::bm', err);
+            await metricsCollector.updateCommandResult(event.id, 'error');
+            await queue.addToQueue(event.nick, "An error occurred while executing the bm command.", true, event.id, false);
+        } finally {
+            try {
+                await db.disconnect();
+                await metricsCollector.close();
+            } catch (e) {
+                Logger.errorCatch('Command::bm::disconnect', e);
+            }
         }
     }
 };

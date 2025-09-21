@@ -1,32 +1,27 @@
+const Logger = require('../utils/Logger');
 const RedisStore = require('../services/RedisStore');
-require('dotenv').config();
-
+const Thread2Database = require('../services/SQL');
+const MetricsCollector = require('../services/MetricsCollector');
+const Notifier = require('../services/Notifier');
+const OsuApiWrapper = require('../services/OsuApiWrapper');
+const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
+const { getUserErrorMessage } = require('../utils/UserFacingError');
+const parseCommandParameters = require('../utils/parser/bmParser');
 const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
-const findScoresByPPRange = require('../compute//osu/findScoreByPPRange');
+const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
 const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
 const computeTargetPP = require('../compute/osu/targetPP');
-
-const { SendBeatmapMessage, SendNotFoundBeatmapMessage, SendErrorInternal } = require('../utils/messages');
-
 const modsToBitwise = require('../utils/osu/modsToBitwise');
-const parseCommandParameters = require('../utils/parser/bmParser');
 
-const OsuApiWrapper = require('../services/OsuApiWrapper');
-const OsuApiV1 = require('../services/OsuApiV1');
 const osuApi = new OsuApiWrapper();
-
-const Thread2Database = require('../services/SQL');
-const Logger = require('../utils/Logger');
-
-const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
 
-const { getUserErrorMessage } = require('../utils/UserFacingError');
-
+let GlobalData;
 
 function filterOutTop100(results, beatmapIdSet) {
     return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
 }
+
 function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {
     const requiredMods = modsToBitwise(requiredModsArray);
     const neutralModsMask = 32 | 16384;
@@ -62,19 +57,26 @@ function pickBestRandomPrecision(filtered) {
 process.on('message', async (data) => {
     GlobalData = data;
     const db = new Thread2Database();
-    const performe = new RedisStore();
+    const redisStore = new RedisStore();
+    const metricsCollector = new MetricsCollector();
+    const startTime = Date.now();
 
     try {
+        Logger.task('OSU Worker received data, starting processing...');
+        let elapsed;
+
         await db.connect();
-        await performe.init();
-        const t = performe.startTimer();
-        const startTime = Date.now();
+        await redisStore.init();
+        await metricsCollector.init();
+
         const params = parseCommandParameters(data.event.message);
-        const suggestions = await performe.getUserSuggestions(data.user.id);
+        await metricsCollector.recordStepDuration(data.event.id, 'parse_params');
+        const suggestions = await redisStore.getUserSuggestions(data.user.id);
+        await metricsCollector.recordStepDuration(data.event.id, 'get_suggestions');
         const top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+        await metricsCollector.recordStepDuration(data.event.id, 'get_top100');
 
         if (!top100 || !top100.osu || !top100.osu.tr || top100.osu.tr.length === 0) {
-            const elapsed = Date.now() - startTime;
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
@@ -85,18 +87,22 @@ process.on('message', async (data) => {
                 success: true,
                 errorCode: 'ERR_NO_SCORES'
             });
+            elapsed = Date.now() - startTime;
             await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await metricsCollector.updateCommandResult(data.event.id, 'not_scores');
             return;
         }
 
         const top100Osu = top100.osu;
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
+        await metricsCollector.recordStepDuration(data.event.id, 'compute_cross_mode_progression_potential');
 
         const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
+        await metricsCollector.recordStepDuration(data.event.id, 'compute_refined_global_pprange');
         const results = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
+        await metricsCollector.recordStepDuration(data.event.id, 'find_scores_by_pprange');
 
         if (!results || results.length === 0) {
-            const elapsed = Date.now() - startTime;
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
@@ -107,19 +113,23 @@ process.on('message', async (data) => {
                 success: true,
                 errorCode: 'ERR_NO_BEATMAP'
             });
+            elapsed = Date.now() - startTime;
             await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
 
         const targetPP = computeTargetPP(top100Osu.tr, sum);
+        await metricsCollector.recordStepDuration(data.event.id, 'compute_target_pp');
 
         let filtered = filterByMods(results, params.mods, params.allowOtherMods);
-        filtered = filterOutTop100(filtered, top100Osu.table)
-            .filter(score => score.precision < 8)
-            .sort((a, b) => b.precision - a.precision);
+        await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
+        filtered = filterOutTop100(filtered, top100Osu.table);
+        await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
+        filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
+        await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
         if (filtered.length === 0) {
-            const elapsed = Date.now() - startTime;
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
@@ -130,54 +140,16 @@ process.on('message', async (data) => {
                 success: true,
                 errorCode: 'ERR_NO_BEATMAP'
             });
+            elapsed = Date.now() - startTime;
             await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
 
-        const t2 = performe.startTimer();
-        const sortList = [];
-
-        for (const score of filtered) {
-            const mapId = parseInt(score.beatmap_id);
-            if (suggestions.includes(mapId.toString())) continue;
-
-            const scorePP = parseFloat(score.pp);
-            let shouldInclude = false;
-
-            if (params.pp !== null) {
-                const ppMargin = 15;
-                shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
-            } else {
-                shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
-            }
-
-            if (shouldInclude) {
-                sortList.push(score);
-            }
-        }
-
-        await performe.logDuration('SORTO', await t2.stop('SORTO'));
-
-        if (sortList.length === 0) {
-            const elapsed = Date.now() - startTime;
-            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
-            process.send({
-                username: data.event.nick,
-                response: msg,
-                id: data.event.id,
-                beatmapId: 0,
-                userId: data.user.id,
-                success: true,
-                errorCode: 'ERR_NO_BEATMAP'
-            });
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
-            return;
-        }
-
-        const selected = pickBestRandomPrecision(sortList);
+        const selected = pickBestRandomPrecision(filtered);
+        await metricsCollector.recordStepDuration(data.event.id, 'pick_best_random_precision');
 
         if (!selected) {
-            const elapsed = Date.now() - startTime;
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
@@ -188,40 +160,45 @@ process.on('message', async (data) => {
                 success: true,
                 errorCode: 'ERR_NO_BEATMAP'
             });
+            elapsed = Date.now() - startTime;
             await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
 
-        let beatmap;
-        try {
-            beatmap = await OsuApiV1.getBeatmap(selected.beatmap_id);
-            if (!beatmap) {
-                throw new Error('Beatmap not found');
-            }
-        } catch (beatmapError) {
-            Logger.errorCatch('OSU Worker - getBeatmap', beatmapError);
-            const elapsed = Date.now() - startTime;
-            const msg = await SendErrorInternal(data.user.locale, data.event.id);
+        const beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+        await metricsCollector.recordStepDuration(data.event.id, 'get_beatmap');
+
+        if (!beatmap) {
+            const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
                 response: msg,
                 id: data.event.id,
-                beatmapId: selected.beatmap_id,
+                beatmapId: 0,
                 userId: data.user.id,
                 success: true,
-                errorCode: 'ERR_BEATMAP_NOT_FOUND'
+                errorCode: 'ERR_NO_BEATMAP'
             });
+            elapsed = Date.now() - startTime;
             await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
 
-        const elapsed = Date.now() - startTime;
         const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
-
-        await performe.logDuration('O', await t.stop('O'));
-        await performe.logCommand(data.user.id, 'O');
-        await performe.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
+        await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
         await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP);
+        await metricsCollector.recordStepDuration(data.event.id, 'save_suggestion');
+
+        await metricsCollector.updateCommandResult(data.event.id, 'success');
+
+        await redisStore.addSuggestion(selected.beatmap_id, data.user.id);
+        await metricsCollector.recordStepDuration(data.event.id, 'add_suggestion_redis');
+
+        elapsed = Date.now() - startTime;
+        await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
+        await metricsCollector.recordStepDuration(data.event.id, 'save_command_history');
 
         process.send({
             username: data.event.nick,
@@ -232,19 +209,24 @@ process.on('message', async (data) => {
             success: true
         });
 
-        await performe.addSuggestion(selected.beatmap_id, data.user.id);
-        await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
     } catch (e) {
         Logger.errorCatch('OSU Worker', e);
-        await notifier.send(`OSU Worker Error: ${e.toString()}`, 'WORKER.OSU.FAIL');
+
+        try {
+            await notifier.send(`OSU Worker Error: ${e.toString()}`, 'WORKER.OSU.FAIL');
+        } catch (notifierError) {
+            Logger.errorCatch('OSU Worker → Notifier Error', notifierError);
+        }
 
         try {
             const locale = data.user?.locale || 'FR';
             const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
 
-            await performe.logDuration('O', 0);
-            await performe.logCommand(data.user.id, 'O');
-            await performe.close();
+            try {
+                await metricsCollector.updateCommandResult(data.event.id, 'worker_crash');
+            } catch (metricsError) {
+                Logger.errorCatch('OSU Worker → Metrics Error', metricsError);
+            }
 
             process.send({
                 username: data.event.nick,
@@ -252,17 +234,27 @@ process.on('message', async (data) => {
                 id: data.event.id,
                 beatmapId: 0,
                 userId: data.user.id,
-                success: true,
+                success: false,
                 errorCode: 'ERR_WORKER_CRASH'
             });
 
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+            try {
+                await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+            } catch (dbError) {
+                Logger.errorCatch('OSU Worker → DB Error', dbError);
+            }
+
         } catch (inner) {
             Logger.errorCatch('OSU Worker → Secondary Failure', inner);
-            await notifier.send(`Double error in worker.o.js: ${inner.toString()}`, 'WORKER.OSU.FAIL2');
+            try {
+                await notifier.send(`Double error in worker.o.js: ${inner.toString()}`, 'WORKER.OSU.FAIL2');
+            } catch (notifierError2) {
+                Logger.errorCatch('OSU Worker → Notifier Error 2', notifierError2);
+            }
         }
     } finally {
-        await performe.close();
+        await redisStore.close();
+        await metricsCollector.close();
         process.removeAllListeners('message');
         try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();

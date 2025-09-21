@@ -3,6 +3,7 @@ const OsuAuth = require('./OsuAuth');
 const RedisStore = require('./RedisStore');
 const Notifier = require('./Notifier');
 const Logger = require('../utils/Logger');
+const MetricsCollector = require('./MetricsCollector');
 
 class OsuApiV2 {
     constructor() {
@@ -23,10 +24,13 @@ class OsuApiV2 {
     }
     async makeAuthenticatedRequest(endpoint, options = {}, operationName = 'API_REQUEST') {
         const performe = new RedisStore();
+        const metricsCollector = new MetricsCollector();
         let duration = null;
 
         try {
             await performe.init();
+            await metricsCollector.init();
+
             const t = performe.startTimer();
             const accessToken = await this.auth.getValidAccessToken();
 
@@ -43,6 +47,8 @@ class OsuApiV2 {
 
             const response = await axios(config);
             duration = await t.stop(operationName);
+
+            await metricsCollector.recordServicePerformance('api', operationName, duration, 'v2');
 
             return response.data;
         } catch (error) {
@@ -80,12 +86,10 @@ class OsuApiV2 {
             await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
             throw new Error(msg);
         } finally {
-            if (duration !== null && performe) {
-                await performe.logDuration(operationName, duration);
-            }
             if (performe) {
                 await performe.close();
             }
+            await metricsCollector.close();
         }
     }
     async getUser(user, mode = 'osu') {
@@ -234,10 +238,13 @@ class OsuApiV2 {
         const modes = ['osu', 'taiko', 'fruits', 'mania'];
         const modeNames = ['osu', 'taiko', 'catch', 'mania'];
         const performe = new RedisStore();
+        const metricsCollector = new MetricsCollector();
         let duration = null;
 
         try {
             await performe.init();
+            await metricsCollector.init();
+
             const t = performe.startTimer();
             const results = {};
 
@@ -346,13 +353,15 @@ class OsuApiV2 {
             }
 
             duration = await t.stop('GETTOP_ALL_MODES_V2');
+            await metricsCollector.recordServicePerformance('api', 'getTopScoresAllModes', duration, 'v2');
+
             return results;
         } catch (err) {
             await this.notifier.send(`Erreur getTopScoresAllModes(${userId}) [${id}] : ${err.message}`, 'OSUAPIV2.GETTOP');
             throw err;
         } finally {
-            if (duration !== null) await performe.logDuration('GETTOP_ALL_MODES_V2', duration);
             await performe.close();
+            await metricsCollector.close();
         }
     }
     async getTop100MultiMods(userId, id) {

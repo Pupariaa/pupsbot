@@ -2,6 +2,7 @@ const axios = require('axios');
 const RedisStore = require('./RedisStore');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
+const MetricsCollector = require('./MetricsCollector');
 const notifier = new Notifier();
 
 async function getUser(username, id) {
@@ -12,13 +13,18 @@ async function getUser(username, id) {
     }
 
     const performe = new RedisStore();
+    const metricsCollector = new MetricsCollector();
     let duration = null;
 
     try {
         await performe.init();
+        await metricsCollector.init();
+
         const t = performe.startTimer();
         const { data } = await axios.get(`https://osu.ppy.sh/api/get_user?k=${process.env.OSU_API_KEY}&u=${username}&m=0`);
         duration = await t.stop('GETUSER');
+
+        await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'v1');
 
         return {
             locale: data[0].country,
@@ -30,8 +36,8 @@ async function getUser(username, id) {
         await notifier.send(`Erreur getUser(${username}) [${id}] : ${err.message}`, 'OSUAPI.GETUSER');
         throw err;
     } finally {
-        if (duration !== null) await performe.logDuration('GETUSER', duration);
         await performe.close();
+        await metricsCollector.close();
     }
 }
 
@@ -45,10 +51,13 @@ async function getTop100MultiMods(userId, id) {
     const modes = ['0', '1', '2', '3'];
     const modeNames = ['osu', 'taiko', 'catch', 'mania'];
     const performe = new RedisStore();
+    const metricsCollector = new MetricsCollector();
     let duration = null;
 
     try {
         await performe.init();
+        await metricsCollector.init();
+
         const t = performe.startTimer();
         const results = {};
 
@@ -115,13 +124,15 @@ async function getTop100MultiMods(userId, id) {
         }
 
         duration = await t.stop('GETTOP_ALL_MODES');
+        await metricsCollector.recordServicePerformance('api', 'getTop100MultiMods', duration, 'v1');
+
         return results;
     } catch (err) {
         await notifier.send(`Erreur getTop100MultiMods(${userId}) : ${err.message}`, 'OSUAPI.GETTOP');
         throw err;
     } finally {
-        if (duration !== null) await performe.logDuration('GETTOP_ALL_MODES', duration);
         await performe.close();
+        await metricsCollector.close();
     }
 }
 
@@ -133,20 +144,26 @@ async function getBeatmap(bid) {
     }
 
     const performe = new RedisStore();
+    const metricsCollector = new MetricsCollector();
     let duration = null;
 
     try {
         await performe.init();
+        await metricsCollector.init();
+
         const t = performe.startTimer();
         const { data } = await axios.get(`https://osu.ppy.sh/api/get_beatmaps?k=${process.env.OSU_API_KEY}&b=${bid}`);
         duration = await t.stop('GETMAP');
+
+        await metricsCollector.recordServicePerformance('api', 'getBeatmap', duration, 'v1');
+
         return data[0];
     } catch (err) {
         await notifier.send(`Erreur getBeatmap(${bid}) : ${err.message}`, 'OSUAPI.GETMAP');
         throw err;
     } finally {
-        if (duration !== null) await performe.logDuration('GETMAP', duration);
         await performe.close();
+        await metricsCollector.close();
     }
 }
 
@@ -156,7 +173,12 @@ async function hasUserPlayedMap(userId, beatmapId) {
         return false;
     }
 
+    const metricsCollector = new MetricsCollector();
+    const startTime = Date.now();
+
     try {
+        await metricsCollector.init();
+
         const params = {
             k: process.env.OSU_API_KEY,
             u: userId,
@@ -184,6 +206,10 @@ async function hasUserPlayedMap(userId, beatmapId) {
     } catch (err) {
         Logger.errorCatch('OsuApiV1', `Error checking if user played beatmap ${beatmapId}`, err);
         return false;
+    } finally {
+        const duration = Date.now() - startTime;
+        await metricsCollector.recordServicePerformance('api', 'hasUserPlayedMap', duration, 'v1');
+        await metricsCollector.close();
     }
 }
 

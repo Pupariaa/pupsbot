@@ -1,6 +1,7 @@
 const axios = require('axios');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
+const MetricsCollector = require('./MetricsCollector');
 const notifier = new Notifier();
 
 class OsuAuth {
@@ -18,7 +19,12 @@ class OsuAuth {
 
 
     async getClientCredentialsToken(scope = 'public') {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
+
             const response = await axios.post(`${this.baseUrl}/token`, {
                 client_id: this.clientId,
                 client_secret: this.clientSecret,
@@ -35,6 +41,9 @@ class OsuAuth {
             this.accessToken = tokenData.access_token;
             this.expiresAt = Date.now() + (tokenData.expires_in * 1000);
 
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('api', 'getClientCredentialsToken', duration, 'auth');
+
             Logger.service('OsuAuth: Client credentials token successfully obtained');
             return tokenData;
         } catch (error) {
@@ -42,6 +51,8 @@ class OsuAuth {
             Logger.errorCatch('OsuAuth', msg);
             await notifier.send(msg, 'OSUAUTH.CLIENT_CREDENTIALS');
             throw new Error(msg);
+        } finally {
+            await metricsCollector.close();
         }
     }
 

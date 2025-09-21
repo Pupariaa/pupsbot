@@ -18,36 +18,17 @@ module.exports = {
             await db.connect();
 
             const u = await getUser(event.nick);
-            const responseMessage = u.locale === 'FR' ?
-                `-- v2.1.0 Nouvelle mise à jour Pupsbot ! --
-                - Nouveaux filtres avancés : pp:XXX et bpm:XXX pour des recommendations ultra-précises
-                - Exemple: !o HD pp:200 bpm:180 pour des maps HD donnant ~200pp avec ~180 BPM
-                - Système de tracking des scores réparé (était cassé depuis 1 mois+)
-                - Intégration osu! API V2 pour de meilleures performances
-                - Dashboard de monitoring disponible sur remote.pupsweb.cc
-                - Optimisations Redis pour le filtrage BPM (plus rapide)
-                -- Historique v2.0.212/v2.0.219 --
-                - Support complet des mods avec syntaxe flexible
-                - Précision ajustable des scores (precis 1-8)
-                - Base de données 50M+ scores
-                - Calcul automatique du PP cible pour rank up
-                - Anti-spam et optimisations diverses
-                `
-                :
-                `-- v2.1.0 New Pupsbot Update! --
-                - New advanced filters: pp:XXX and bpm:XXX for ultra-precise recommendations
-                - Example: !o HD pp:200 bpm:180 for HD maps giving ~200pp with ~180 BPM
-                - Fixed score tracking system (was broken for 1+ month)
-                - osu! API V2 integration for better performance
-                - Monitoring dashboard available at remote.pupsweb.cc
-                - Redis optimizations for BPM filtering (faster)
-                -- v2.0.212/v2.0.219 History --
-                - Full mod support with flexible syntax
-                - Adjustable score precision (precis 1-8)
-                - 50M+ scores database
-                - Automatic target PP calculation for rank up
-                - Anti-spam and various optimizations
-                `;
+            const responseMessage = u.locale === 'FR'
+            ? `-- v2.2.0 Nouvelle mise à jour Pupsbot ! --
+            - Sécurité renforcée & logs améliorés
+            - Nouveau système de monitoring (Metrics & Health)
+            - Intégration complète osu! API V2
+            - Dashboard dispo: remote.pupsweb.cc`
+            : `-- v2.2.0 New Pupsbot Update! --
+            - Enhanced security & improved logging
+            - New monitoring system (Metrics & Health)
+            - Full osu! API V2 integration
+            - Dashboard: remote.pupsweb.cc`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);

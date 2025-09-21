@@ -2,18 +2,27 @@ const { getUser } = require('../services/OsuApiV1');
 const fork = require('child_process').fork;
 const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
-
+const MetricsCollector = require('../services/MetricsCollector');
 
 module.exports = {
     name: 'o',
     async execute(event, args, queue) {
         const performe = new RedisStore();
+        const metricsCollector = new MetricsCollector();
+        await metricsCollector.init();
         try {
+            await metricsCollector.createCommandEntry(event.id, 'o');
             await performe.markPending(event.id);
             const child = fork((__dirname, '..', 'workers/osu.js'));
             const user = await getUser(event.nick);
-
-            child.send({ event, user });
+            await metricsCollector.recordStepDuration(event.id, 'get_user');
+            try {
+                child.send({ event, user });
+            } catch (error) {
+                Logger.errorCatch('COMMAND_O_SEND', error);
+                await queue.addToQueue(event.nick, "Worker communication error.", false, event.id, false);
+                return;
+            }
 
             child.on('message', async (msgFromWorker) => {
                 if (msgFromWorker && msgFromWorker.username && msgFromWorker.response) {
@@ -41,6 +50,7 @@ module.exports = {
                 }
             });
         } catch (e) {
+            console.log(e);
             Logger.errorCatch('osu', e);
             await queue.addToQueue(event.nick, "An error occurred while executing the bm command.", false, event.id, false);
         }

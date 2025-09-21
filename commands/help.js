@@ -1,6 +1,7 @@
 const { getUser } = require('../services/OsuApiV1');
 const Logger = require('../utils/Logger');
 const ErrorHandler = require('../utils/ErrorHandler');
+const MetricsCollector = require('../services/MetricsCollector');
 
 const logger = new Logger();
 const errorHandler = new ErrorHandler();
@@ -12,9 +13,13 @@ module.exports = {
 
     async execute(event, args, queue) {
         const startTime = Date.now();
+        const metricsCollector = new MetricsCollector();
         let user = null;
 
         try {
+            await metricsCollector.init();
+            await metricsCollector.createCommandEntry(event.id, 'help');
+
             logger.info('HELP_COMMAND', 'Processing help command', {
                 user: event.nick,
                 id: event.id
@@ -39,6 +44,7 @@ module.exports = {
                 : `🤖 Available commands: ${commandList} | Use /np with a beatmap for PP gains | New filters: pp:150 bpm:180 | Example: !o HD pp:200 bpm:160`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
+            await metricsCollector.updateCommandResult(event.id, 'success');
 
             const duration = Date.now() - startTime;
             logger.performance('HELP_COMMAND', duration, {
@@ -47,6 +53,7 @@ module.exports = {
             });
 
         } catch (error) {
+            await metricsCollector.updateCommandResult(event.id, 'error');
             errorHandler.handleError(error, 'HELP_COMMAND', {
                 user: event.nick,
                 id: event.id
@@ -57,6 +64,12 @@ module.exports = {
                 : 'An error occurred while displaying help.';
 
             await queue.addToQueue(event.nick, errorMsg, false, event.id, false);
+        } finally {
+            try {
+                await metricsCollector.close();
+            } catch (e) {
+                Logger.errorCatch('help::disconnect', e);
+            }
         }
     }
 };

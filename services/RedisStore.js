@@ -1,6 +1,7 @@
 const RedisManager = require('./Redis');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
+const MetricsCollector = require('./MetricsCollector');
 const notifier = new Notifier();
 
 class Performe {
@@ -73,13 +74,23 @@ class Performe {
     }
 
     async markPending(id, ttl = 30) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             Logger.task(`Mark pending: ${id}`);
             await this._ensureReady();
             await this._redis.set(`pending:${id}`, '1', { EX: ttl });
             await this._redis.zAdd('unresolved:pending', [{ score: Date.now(), value: id.toString() }]);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'markPending', duration);
+
         } catch (error) {
             Logger.errorCatch('PERFORME.MARK_PENDING', error);
+        } finally {
+            await metricsCollector.close();
         }
     }
 
@@ -145,23 +156,44 @@ class Performe {
     }
 
     async addSuggestion(bmid, userId, ttl = 604800) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this._ensureReady();
             const key = `user:${userId}:suggested`;
             await this._redis.sAdd(key, bmid);
             await this._redis.expire(key, ttl);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'addSuggestion', duration);
+
         } catch (error) {
             Logger.errorCatch('PERFORME.ADD_SUGGESTION', error);
+        } finally {
+            await metricsCollector.close();
         }
     }
 
     async getUserSuggestions(userId) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this._ensureReady();
-            return await this._redis.sMembers(`user:${userId}:suggested`);
+            const result = await this._redis.sMembers(`user:${userId}:suggested`);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'getUserSuggestions', duration);
+
+            return result;
         } catch (error) {
             Logger.errorCatch('PERFORME.GET_SUGGESTIONS', error);
             return [];
+        } finally {
+            await metricsCollector.close();
         }
     }
 

@@ -6,3 +6,6 @@ node_modules/
 osu_token.json
 logs/application.log
 .vscode/settings.json
+/scripts
+/exports
+MONITORING_README.md

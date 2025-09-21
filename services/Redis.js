@@ -1,6 +1,7 @@
 const { createClient } = require('redis');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
+const MetricsCollector = require('./MetricsCollector');
 const notifier = new Notifier();
 
 class RedisManager {
@@ -41,9 +42,16 @@ class RedisManager {
         if (this._connecting) return;
 
         this._connecting = true;
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
 
         try {
+            await metricsCollector.init();
             await this.client.connect();
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'connect', duration);
+
         } catch (error) {
             this._connected = false;
             this._connecting = false;
@@ -52,19 +60,31 @@ class RedisManager {
             await notifier.send(`Redis connection failed: ${error.message}`, 'REDIS.CONNECT');
 
             throw error;
+        } finally {
+            await metricsCollector.close();
         }
     }
 
     async quit() {
         if (!this._connected) return;
 
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this.client.quit();
             this._connected = false;
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'quit', duration);
+
         } catch (error) {
             Logger.redisErr('REDIS.QUIT', error);
             await notifier.send(`Error during Redis shutdown: ${error.message}`, 'REDIS.QUIT');
             throw error;
+        } finally {
+            await metricsCollector.close();
         }
     }
 

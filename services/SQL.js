@@ -4,6 +4,7 @@ const CommandHistoryModel = require('../models/CommandHistory');
 const FeedBackModel = require('../models/FeedBack');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
+const MetricsCollector = require('./MetricsCollector');
 
 const notifier = new Notifier();
 
@@ -32,13 +33,23 @@ class Thread2Database {
     async connect() {
         if (this._connected) return;
 
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this.sequelize.authenticate();
             this._connected = true;
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('db', 'connect', duration);
+
         } catch (error) {
             Logger.errorCatch('DB.CONNECT', error);
             await notifier.send(`Database connection failed: ${error.message}`, 'DB.CONNECT');
             throw error;
+        } finally {
+            await metricsCollector.close();
         }
     }
 
@@ -66,7 +77,11 @@ class Thread2Database {
     }
 
     async saveSuggestion(userId, beatmapId, eventId, ppTarget) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this._models.SuggestedBeatmap.upsert({
                 user_id: userId,
                 beatmap_id: beatmapId,
@@ -74,9 +89,15 @@ class Thread2Database {
                 Date: new Date(),
                 pp_target: ppTarget
             });
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('db', 'saveSuggestion', duration);
+
         } catch (error) {
             Logger.errorCatch('DB.SAVE_SUGGESTION', error);
             await notifier.send(`Failed to save suggestion for user ${userId} - beatmap ${beatmapId}: ${error.message}`, 'DB.SAVE_SUGGESTION');
+        } finally {
+            await metricsCollector.close();
         }
     }
 
@@ -108,7 +129,11 @@ class Thread2Database {
     }
 
     async saveCommandHistory(commandId, input, response, userId, username, success, durationMs, locale) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
         try {
+            await metricsCollector.init();
             await this._models.CommandHistory.upsert({
                 command_id: commandId,
                 command_input: input,
@@ -120,9 +145,15 @@ class Thread2Database {
                 elapsed_time: durationMs,
                 locale: locale
             });
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('db', 'saveCommandHistory', duration);
+
         } catch (error) {
             Logger.errorCatch('DB.SAVE_HISTORY', error);
             await notifier.send(`Failed to save command history for ${commandId}: ${error.message}`, 'DB.SAVE_HISTORY');
+        } finally {
+            await metricsCollector.close();
         }
     }
 

@@ -19,7 +19,15 @@ const notifier = new Notifier();
 let GlobalData;
 
 function filterOutTop100(results, beatmapIdSet) {
-    return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
+    if (beatmapIdSet instanceof Set) {
+        return results.filter(score => !beatmapIdSet.has(parseInt(score.beatmap_id, 10)));
+    } else if (Array.isArray(beatmapIdSet)) {
+        return results.filter(score => !beatmapIdSet.includes(parseInt(score.beatmap_id, 10)));
+    } else if (beatmapIdSet && typeof beatmapIdSet === 'object') {
+        const beatmapIds = Object.keys(beatmapIdSet).map(id => parseInt(id, 10));
+        return results.filter(score => !beatmapIds.includes(parseInt(score.beatmap_id, 10)));
+    }
+    return results;
 }
 
 function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {
@@ -73,8 +81,18 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'parse_params');
         const suggestions = await redisStore.getUserSuggestions(data.user.id);
         await metricsCollector.recordStepDuration(data.event.id, 'get_suggestions');
-        const top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
-        await metricsCollector.recordStepDuration(data.event.id, 'get_top100');
+
+        let top100 = await redisStore.getTop100(data.user.id);
+        await metricsCollector.recordStepDuration(data.event.id, 'get_top100_cache');
+
+        if (!top100) {
+            top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+            await metricsCollector.recordStepDuration(data.event.id, 'get_top100_api');
+            if (top100) {
+                await redisStore.recordTop100(data.user.id, top100, 300);
+                await metricsCollector.recordStepDuration(data.event.id, 'record_top100_cache');
+            }
+        }
 
         if (!top100 || !top100.osu || !top100.osu.tr || top100.osu.tr.length === 0) {
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
@@ -129,7 +147,30 @@ process.on('message', async (data) => {
         filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
-        if (filtered.length === 0) {
+
+        const sortList = [];
+
+        for (const score of filtered) {
+            const mapId = parseInt(score.beatmap_id);
+            if (suggestions.includes(mapId.toString())) continue;
+
+            const scorePP = parseFloat(score.pp);
+            let shouldInclude = false;
+
+            if (params.pp !== null) {
+                const ppMargin = 15;
+                shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
+            } else {
+                shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+            }
+
+            if (shouldInclude) {
+                sortList.push(score);
+            }
+        }
+
+
+        if (sortList.length === 0) {
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
             process.send({
                 username: data.event.nick,
@@ -146,7 +187,7 @@ process.on('message', async (data) => {
             return;
         }
 
-        const selected = pickBestRandomPrecision(filtered);
+        const selected = pickBestRandomPrecision(sortList);
         await metricsCollector.recordStepDuration(data.event.id, 'pick_best_random_precision');
 
         if (!selected) {

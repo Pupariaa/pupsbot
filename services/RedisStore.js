@@ -250,6 +250,58 @@ class Performe {
             Logger.errorCatch('PERFORME.GET_BEATMAP', error);
         }
     }
+
+    async recordTop100(userId, top100Data, ttl = 300) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `top100:${userId}`;
+
+            const serializedData = JSON.parse(JSON.stringify(top100Data, (key, value) => {
+                if (value instanceof Set) {
+                    return Array.from(value);
+                }
+                return value;
+            }));
+
+            await this._redis.set(key, JSON.stringify(serializedData), { EX: ttl });
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'recordTop100', duration);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.RECORD_TOP100', error);
+        } finally {
+            await metricsCollector.close();
+        }
+    }
+
+    async getTop100(userId) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `top100:${userId}`;
+            const cachedData = await this._redis.get(key);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'getTop100', duration);
+
+            if (!cachedData) return null;
+            return JSON.parse(cachedData);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_TOP100', error);
+            return null;
+        } finally {
+            await metricsCollector.close();
+        }
+    }
 }
 
 module.exports = Performe;

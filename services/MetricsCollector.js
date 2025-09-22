@@ -704,7 +704,40 @@ class MetricsCollector {
             Logger.errorCatch('METRICS_COLLECTOR.CLOSE', error);
         }
     }
+
+    /**
+     * Store data directly in Redis (for dynamic data like workers)
+     * @param {string} key - Redis key
+     * @param {string} data - Data to store (JSON string)
+     */
+    async setRedisData(key, data) {
+        try {
+            if (!this._connected) {
+                await this.init();
+            }
+            await this.client.set(key, data);
+        } catch (error) {
+            Logger.errorCatch('METRICS_COLLECTOR.SET_REDIS_DATA', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Get data directly from Redis (for dynamic data like workers)
+     * @param {string} key - Redis key
+     * @returns {string|null} Data from Redis
+     */
+    async getRedisData(key) {
+        try {
+            if (!this._connected) {
+                await this.init();
+            }
+            return await this.client.get(key);
+        } catch (error) {
+            Logger.errorCatch('METRICS_COLLECTOR.GET_REDIS_DATA', error);
+            return null;
+        }
+    }
 }
 
-module.exports = MetricsCollector;
 module.exports = MetricsCollector;

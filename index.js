@@ -12,10 +12,12 @@ const SQL = require('./services/SQL');
 const MetricsCollector = require('./services/MetricsCollector');
 const Notifier = require('./services/Notifier');
 const BotHealthMonitor = require('./services/BotHealthMonitor');
+const WorkerMonitor = require('./services/WorkerMonitor');
 const notifier = new Notifier();
 
-let healthMonitor, performe, metricsCollector;
+let healthMonitor, performe, metricsCollector, workerMonitor;
 global.temp = [];
+global.activeWorkers = [];
 
 
 (async () => {
@@ -24,10 +26,15 @@ global.temp = [];
     metricsCollector = new MetricsCollector();
     const db = new SQL();
     healthMonitor = new BotHealthMonitor();
+    workerMonitor = new WorkerMonitor();
 
     await performe.init();
     await metricsCollector.init();
     await healthMonitor.init();
+
+    workerMonitor.startMonitoring();
+
+    global.workerMonitor = workerMonitor;
 
     const trackers = [];
 
@@ -218,6 +225,10 @@ async function gracefulShutdown() {
 
         if (metricsCollector) {
             await metricsCollector.close();
+        }
+
+        if (workerMonitor) {
+            workerMonitor.stopMonitoring();
         }
 
         Logger.service('Graceful shutdown complete');

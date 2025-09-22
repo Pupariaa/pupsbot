@@ -16,6 +16,18 @@ module.exports = {
             const child = fork((__dirname, '..', 'workers/osu.js'));
             const user = await getUser(event.nick);
             await metricsCollector.recordStepDuration(event.id, 'get_user');
+
+            // Register worker with global monitoring
+            if (global.workerMonitor) {
+                global.workerMonitor.addWorker(
+                    child,
+                    event.id,
+                    'osu',
+                    user.id,
+                    event.nick
+                );
+            }
+
             try {
                 child.send({ event, user });
             } catch (error) {

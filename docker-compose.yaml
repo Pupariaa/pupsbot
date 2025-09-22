@@ -1,0 +1,57 @@
+version: "3.9"
+services:
+  Pupsbot-V2:
+    image: puparia/js-21-8g
+    container_name: Pupsbot-V2
+    working_dir: /app
+    command: ["node","--max-old-space-size=8192","index.js"]
+    environment:
+      - TZ=Europe/Paris
+      - NODE_ENV=production
+    user: "99:100"
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+      - /run:size=16m,mode=755
+      - /var/tmp:size=64m,mode=1777
+    volumes:
+      - /mnt/disk2/Pupsbot:/app:rw
+      - /mnt/disk1/Dockers/Common/:/common:ro
+    expose:
+      - "25586"
+      - "25587"
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+    restart: unless-stopped
+    stop_grace_period: 45s
+    stop_signal: SIGINT
+    healthcheck:
+      test: ["CMD-SHELL","node -e \"require('net').connect(25586,'127.0.0.1').once('connect',()=>process.exit(0)).once('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+      nproc: 16384
+      core: 0
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add: []
+    networks:
+      - br0
+    ipc: private
+    mem_limit: 8589934592
+    labels:
+      net.unraid.docker.icon: https://a.ppy.sh/5146531?1684711996.jpeg
+      net.unraid.docker.managed: dockerman
+networks:
+  br0:
+    external: true

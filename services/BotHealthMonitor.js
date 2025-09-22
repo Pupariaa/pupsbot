@@ -85,6 +85,68 @@ class BotHealthMonitor {
         };
     }
 
+    async updateWorkerDataInRedis() {
+        try {
+            if (!global.workerMonitor) {
+                await this.metricsCollector.setRedisData('workers', JSON.stringify([]));
+                return;
+            }
+
+            const activeWorkers = global.workerMonitor.getActiveWorkers();
+            const workerCounts = global.workerMonitor.getWorkerCounts();
+            const totalResources = global.workerMonitor.getTotalResourceUsage();
+
+            const workerData = {
+                activeWorkers: activeWorkers,
+                counts: workerCounts,
+                totalResources: totalResources,
+                lastUpdate: Date.now()
+            };
+
+            await this.metricsCollector.setRedisData('workers', JSON.stringify(workerData));
+
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.updateWorkerDataInRedis', error);
+            await this.metricsCollector.setRedisData('workers', JSON.stringify({
+                activeWorkers: [],
+                counts: {},
+                totalResources: { cpu: 0, memory: 0, workerCount: 0 },
+                lastUpdate: Date.now()
+            }));
+        }
+    }
+
+    async updateSystemDataInRedis(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary) {
+        try {
+            const systemData = {
+                memory: {
+                    heapUsedMB: heapUsedMB,
+                    rssMB: rssMB,
+                    externalMB: externalMB,
+                    maxRSSMB: maxRSSMB
+                },
+                eventloop: {
+                    lagMean: lagMean,
+                    lagMax: lagMax,
+                    lagStddev: lagStddev
+                },
+                cpu: {
+                    userCPU: cpuUsage.userCPU,
+                    systemCPU: cpuUsage.systemCPU,
+                    cpuPercent: cpuUsage.cpuPercent
+                },
+                gc: {
+                    summary: gcSummary
+                },
+                lastUpdate: Date.now()
+            };
+            await this.metricsCollector.setRedisData('system_current', JSON.stringify(systemData));
+
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.updateSystemDataInRedis', error);
+        }
+    }
+
     async collectHealthMetrics() {
         const healthId = generateId();
 
@@ -110,9 +172,14 @@ class BotHealthMonitor {
 
             const cpuUsage = await this.getCPUUsagePercent();
 
+            await this.updateWorkerDataInRedis();
+
+            await this.updateSystemDataInRedis(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary);
+
             await this.metricsCollector.recordStepDuration(healthId, 'collect_memory');
             await this.metricsCollector.recordStepDuration(healthId, 'collect_cpu');
             await this.metricsCollector.recordStepDuration(healthId, 'collect_eventloop');
+            await this.metricsCollector.recordStepDuration(healthId, 'collect_workers');
 
             await this.metricsCollector.updateCommandDurations(healthId, {
                 'memory_heap_used': heapUsedMB,
@@ -211,6 +278,113 @@ class BotHealthMonitor {
             throw error;
         } finally {
             await this.metricsCollector.close();
+        }
+    }
+
+    async getWorkerStats(limit = 100) {
+        try {
+            await this.metricsCollector.init();
+            const workerStats = await this.metricsCollector.getServiceStats('workers', limit);
+            return workerStats || {};
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.getWorkerStats', error);
+            throw error;
+        } finally {
+            await this.metricsCollector.close();
+        }
+    }
+
+    async getAllStats(limit = 100) {
+        try {
+            await this.metricsCollector.init();
+            const allStats = await this.metricsCollector.getAllServiceStats(limit);
+            return {
+                system: allStats.system || {},
+                workers: allStats.workers || {}
+            };
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.getAllStats', error);
+            throw error;
+        } finally {
+            await this.metricsCollector.close();
+        }
+    }
+
+    async getWorkersData() {
+        try {
+            await this.metricsCollector.init();
+            const workerData = await this.metricsCollector.getRedisData('workers');
+
+            if (!workerData) {
+                return {
+                    activeWorkers: [],
+                    counts: {},
+                    totalResources: { cpu: 0, memory: 0, workerCount: 0 },
+                    lastUpdate: Date.now()
+                };
+            }
+
+            return JSON.parse(workerData);
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.getWorkersData', error);
+            return {
+                activeWorkers: [],
+                counts: {},
+                totalResources: { cpu: 0, memory: 0, workerCount: 0 },
+                lastUpdate: Date.now()
+            };
+        } finally {
+            await this.metricsCollector.close();
+        }
+    }
+
+    async getCurrentSystemData() {
+        try {
+            await this.metricsCollector.init();
+            const systemData = await this.metricsCollector.getRedisData('system_current');
+
+            if (!systemData) {
+                return {
+                    memory: { heapUsedMB: 0, rssMB: 0, externalMB: 0, maxRSSMB: 0 },
+                    eventloop: { lagMean: 0, lagMax: 0, lagStddev: 0 },
+                    cpu: { userCPU: 0, systemCPU: 0, cpuPercent: 0 },
+                    gc: { summary: 'none' },
+                    lastUpdate: Date.now()
+                };
+            }
+
+            return JSON.parse(systemData);
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.getCurrentSystemData', error);
+            return {
+                memory: { heapUsedMB: 0, rssMB: 0, externalMB: 0, maxRSSMB: 0 },
+                eventloop: { lagMean: 0, lagMax: 0, lagStddev: 0 },
+                cpu: { userCPU: 0, systemCPU: 0, cpuPercent: 0 },
+                gc: { summary: 'none' },
+                lastUpdate: Date.now()
+            };
+        } finally {
+            await this.metricsCollector.close();
+        }
+    }
+
+    async getAllCurrentData() {
+        try {
+            const [workersData, systemData] = await Promise.all([
+                this.getWorkersData(),
+                this.getCurrentSystemData()
+            ]);
+
+            return {
+                workers: workersData,
+                system: systemData
+            };
+        } catch (error) {
+            Logger.errorCatch('BotHealthMonitor.getAllCurrentData', error);
+            return {
+                workers: { activeWorkers: [], counts: {}, totalResources: { cpu: 0, memory: 0, workerCount: 0 }, lastUpdate: Date.now() },
+                system: { memory: { heapUsedMB: 0, rssMB: 0, externalMB: 0, maxRSSMB: 0 }, eventloop: { lagMean: 0, lagMax: 0, lagStddev: 0 }, cpu: { userCPU: 0, systemCPU: 0, cpuPercent: 0 }, gc: { summary: 'none' }, lastUpdate: Date.now() }
+            };
         }
     }
 }

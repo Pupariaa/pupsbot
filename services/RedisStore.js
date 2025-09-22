@@ -124,6 +124,7 @@ class Performe {
             await this._redis.expire(`track:${id}`, 86400); // 24h
             await this._redis.zAdd('trackers', [{ score: Date.now(), value: id }]);
         } catch (error) {
+            console.log(error);
             Logger.errorCatch('PERFORME.TRACK_BM', error);
         }
     }
@@ -209,6 +210,44 @@ class Performe {
     async _ensureReady() {
         if (!this._connected) {
             await this.init();
+        }
+    }
+
+    async recordBeatmap(beatmap) {
+        try {
+            await this._ensureReady();
+            const key = `beatmap:${beatmap.beatmap_id}`;
+            this._redis.hSet(key, {
+                beatmap_id: beatmap.beatmap_id.toString(),
+                beatmapset_id: beatmap.beatmapset_id.toString(),
+                title: beatmap.title.toString(),
+                artist: beatmap.artist.toString(),
+                creator: beatmap.creator.toString(),
+                version: beatmap.version.toString(),
+                bpm: beatmap.bpm.toString(),
+                diff_size: beatmap.diff_size.toString(),
+                diff_overall: beatmap.diff_overall.toString(),
+                diff_approach: beatmap.diff_approach.toString(),
+                diff_drain: beatmap.diff_drain.toString(),
+                hit_length: beatmap.hit_length.toString(),
+                total_length: beatmap.total_length.toString(),
+                difficultyrating: beatmap.difficultyrating.toString(),
+                mode: beatmap.mode.toString()
+            });
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.RECORD_BEATMAP', error);
+        }
+    }
+
+    async getBeatmap(id) {
+        try {
+            await this._ensureReady();
+            const beatmap = await this._redis.hGetAll(`beatmap:${id}`);
+            if (!beatmap.beatmap_id) return false;
+            return beatmap;
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_BEATMAP', error);
         }
     }
 }

@@ -166,7 +166,13 @@ process.on('message', async (data) => {
             return;
         }
 
-        const beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+        var beatmap = null;
+        if (!await redisStore.getBeatmap(selected.beatmap_id)) {
+            beatmap = await osuApi.getBeatmap(selected.beatmap_id);
+            await redisStore.recordBeatmap(beatmap);
+        } else {
+            beatmap = await redisStore.getBeatmap(selected.beatmap_id);
+        }
         await metricsCollector.recordStepDuration(data.event.id, 'get_beatmap');
 
         if (!beatmap) {

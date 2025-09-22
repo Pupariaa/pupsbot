@@ -92,6 +92,17 @@ process.on('message', async (data) => {
                 await redisStore.recordTop100(data.user.id, top100, 300);
                 await metricsCollector.recordStepDuration(data.event.id, 'record_top100_cache');
             }
+        } else {
+            setImmediate(async () => {
+                try {
+                    const freshTop100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+                    if (freshTop100) {
+                        await redisStore.recordTop100(data.user.id, freshTop100, 300);
+                    }
+                } catch (error) {
+                    Logger.errorCatch('Background top100 update', error);
+                }
+            });
         }
 
         if (!top100 || !top100.osu || !top100.osu.tr || top100.osu.tr.length === 0) {

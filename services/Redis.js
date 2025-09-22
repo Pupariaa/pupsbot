@@ -14,7 +14,8 @@ class RedisManager {
                 host: process.env.REDIS_HOST,
                 port: parseInt(process.env.REDIS_PORT, 10),
                 reconnectStrategy: (retries) => Math.min(retries * 50, 2000)
-            }
+            },
+            database: parseInt('0', 10)
         });
 
         this._setupEventHandlers();

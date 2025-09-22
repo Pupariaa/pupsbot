@@ -89,7 +89,7 @@ class BotHealthMonitor {
         const healthId = generateId();
 
         try {
-            await this.metricsCollector.createCommandEntry(healthId, 'health_check');
+            await this.metricsCollector.createCommandEntry(healthId, 'system_health');
 
             const mem = process.memoryUsage();
             const heapUsedMB = parseFloat((mem.heapUsed / 1024 / 1024).toFixed(2));

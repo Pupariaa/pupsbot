@@ -9,24 +9,47 @@ async function getUser(username, id) {
 
     const performe = new RedisStore();
     const metricsCollector = new MetricsCollector();
-    let duration = null;
+    const startTime = Date.now();
 
     try {
         await performe.init();
         await metricsCollector.init();
 
+        // Check Redis cache first (try both username and id as keys)
+        let cachedProfile = await performe.getCachedProfile(id || username);
+        if (!cachedProfile && username !== id) {
+            // Try with the other parameter as key
+            cachedProfile = await performe.getCachedProfile(username === id ? username : (id || username));
+        }
+
+        if (cachedProfile) {
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'osuApi_cache');
+            console.log(`osuApi: Profile cache hit for user ${id || username}: ${cachedProfile.username}`);
+            return cachedProfile;
+        }
+
+        // Cache miss - fetch from API
+        console.log(`osuApi: Profile cache miss for user ${id || username}, fetching from API`);
+
         const t = performe.startTimer();
         const { data } = await axios.get(`https://osu.ppy.sh/api/get_user?k=${process.env.OSU_API_KEY}&u=${username}&m=0`);
-        duration = await t.stop('GETUSER');
+        const duration = await t.stop('GETUSER');
 
-        await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'osuApi');
-
-        return {
+        const profileData = {
             locale: data[0].country,
             id: parseInt(data[0].user_id),
             username: data[0].username,
             pp: parseInt(data[0].pp_raw)
         };
+
+        // Cache the profile data with both username and id as keys
+        await performe.setCachedProfile(profileData.id, profileData);
+        await performe.setCachedProfile(profileData.username, profileData);
+
+        await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'osuApi');
+
+        return profileData;
     } finally {
         await performe.close();
         await metricsCollector.close();

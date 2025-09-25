@@ -88,7 +88,13 @@ class BotHealthMonitor {
     async updateWorkerDataInRedis() {
         try {
             if (!global.workerMonitor) {
-                await this.metricsCollector.setRedisData('workers', JSON.stringify([]));
+                Logger.service('BotHealthMonitor: global.workerMonitor not available');
+                await this.metricsCollector.setRedisData('workers', JSON.stringify({
+                    activeWorkers: [],
+                    counts: {},
+                    totalResources: { cpu: 0, memory: 0, workerCount: 0 },
+                    lastUpdate: Date.now()
+                }));
                 return;
             }
 
@@ -96,14 +102,32 @@ class BotHealthMonitor {
             const workerCounts = global.workerMonitor.getWorkerCounts();
             const totalResources = global.workerMonitor.getTotalResourceUsage();
 
+            // Add individual worker details for dashboard
+            const workersWithDetails = activeWorkers.map(worker => ({
+                id: worker.id,
+                type: worker.type,
+                userId: worker.userId,
+                username: worker.username,
+                startTime: worker.startTime,
+                status: worker.status,
+                cpuUsage: worker.cpuUsage,
+                memoryUsage: worker.memoryUsage,
+                lastUpdate: worker.lastUpdate,
+                duration: Date.now() - worker.startTime
+            }));
+
             const workerData = {
-                activeWorkers: activeWorkers,
+                activeWorkers: workersWithDetails,
                 counts: workerCounts,
                 totalResources: totalResources,
                 lastUpdate: Date.now()
             };
 
             await this.metricsCollector.setRedisData('workers', JSON.stringify(workerData));
+
+            if (activeWorkers.length > 0) {
+                Logger.service(`BotHealthMonitor: Updated Redis with ${activeWorkers.length} active workers`);
+            }
 
         } catch (error) {
             Logger.errorCatch('BotHealthMonitor.updateWorkerDataInRedis', error);
@@ -375,15 +399,25 @@ class BotHealthMonitor {
                 this.getCurrentSystemData()
             ]);
 
+            // Calculate combined totals (system + workers)
+            const totalCPU = (systemData.cpu?.cpuPercent || 0) + (workersData.totalResources?.cpu || 0);
+            const totalMemory = (systemData.memory?.rssMB || 0) + (workersData.totalResources?.memory || 0);
+
             return {
                 workers: workersData,
-                system: systemData
+                system: systemData,
+                totals: {
+                    cpu: Math.round(totalCPU * 100) / 100,
+                    memory: Math.round(totalMemory * 100) / 100,
+                    workerCount: workersData.totalResources?.workerCount || 0
+                }
             };
         } catch (error) {
             Logger.errorCatch('BotHealthMonitor.getAllCurrentData', error);
             return {
                 workers: { activeWorkers: [], counts: {}, totalResources: { cpu: 0, memory: 0, workerCount: 0 }, lastUpdate: Date.now() },
-                system: { memory: { heapUsedMB: 0, rssMB: 0, externalMB: 0, maxRSSMB: 0 }, eventloop: { lagMean: 0, lagMax: 0, lagStddev: 0 }, cpu: { userCPU: 0, systemCPU: 0, cpuPercent: 0 }, gc: { summary: 'none' }, lastUpdate: Date.now() }
+                system: { memory: { heapUsedMB: 0, rssMB: 0, externalMB: 0, maxRSSMB: 0 }, eventloop: { lagMean: 0, lagMax: 0, lagStddev: 0 }, cpu: { userCPU: 0, systemCPU: 0, cpuPercent: 0 }, gc: { summary: 'none' }, lastUpdate: Date.now() },
+                totals: { cpu: 0, memory: 0, workerCount: 0 }
             };
         }
     }

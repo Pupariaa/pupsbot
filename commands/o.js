@@ -19,7 +19,6 @@ module.exports = {
 
             // Register worker with global monitoring
             if (global.workerMonitor) {
-                Logger.service(`COMMAND_O: Adding worker ${event.id} to WorkerMonitor`);
                 global.workerMonitor.addWorker(
                     child,
                     event.id,
@@ -27,7 +26,6 @@ module.exports = {
                     user.id,
                     event.nick
                 );
-                Logger.service(`COMMAND_O: Worker ${event.id} added successfully`);
             } else {
                 Logger.service('COMMAND_O: global.workerMonitor not available');
             }

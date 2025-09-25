@@ -1,6 +1,7 @@
 const { Sequelize } = require('sequelize');
 const SuggestedBeatmapModel = require('../models/SuggestedBeatmap');
 const CommandHistoryModel = require('../models/CommandHistory');
+const BeatmapModel = require('../models/Beatmaps');
 const FeedBackModel = require('../models/FeedBack');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
@@ -26,7 +27,8 @@ class Thread2Database {
         this._models = {
             SuggestedBeatmap: SuggestedBeatmapModel(this.sequelize),
             CommandHistory: CommandHistoryModel(this.sequelize),
-            FeedBack: FeedBackModel(this.sequelize)
+            FeedBack: FeedBackModel(this.sequelize),
+            Beatmap: BeatmapModel(this.sequelize)
         };
     }
 
@@ -76,7 +78,7 @@ class Thread2Database {
         }
     }
 
-    async saveSuggestion(userId, beatmapId, eventId, ppTarget) {
+    async saveSuggestion(userId, beatmapId, eventId, ppTarget, mods) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();
 
@@ -87,7 +89,9 @@ class Thread2Database {
                 beatmap_id: beatmapId,
                 event_id: eventId,
                 Date: new Date(),
-                pp_target: ppTarget
+                pp_target: ppTarget,
+                mods: mods,
+                nv: true
             });
 
             const duration = Date.now() - startTime;
@@ -169,6 +173,43 @@ class Thread2Database {
         } catch (error) {
             Logger.errorCatch('DB.SAVE_FEEDBACK', error);
             await notifier.send(`Failed to save feedback for command ${commandId}: ${error.message}`, 'DB.SAVE_FEEDBACK');
+        }
+    }
+
+    async saveBeatmap(beatmap) {
+        try {
+            await this._models.Beatmap.findOrCreate({
+                where: {
+                    beatmapId: beatmap.beatmapId,
+                    mods: beatmap.mods ?? null
+                },
+                defaults: {
+                    beatmapId: beatmap.beatmapId,
+                    beatmapsetId: beatmap.beatmapsetId ?? null,
+                    title: beatmap.title ?? null,
+                    author: beatmap.author ?? null,
+                    mapper: beatmap.mapper ?? null,
+                    diffName: beatmap.diffName ?? null,
+                    length: beatmap.length ?? null,
+                    cs: beatmap.cs ?? null,
+                    od: beatmap.od ?? null,
+                    hp: beatmap.hp ?? null,
+                    sr: beatmap.sr ?? null,
+                    ar: beatmap.ar ?? null,
+                    bpm: beatmap.bpm ?? null,
+                    cLength: beatmap.cLength ?? null,
+                    cCs: beatmap.cCs ?? null,
+                    cOd: beatmap.cOd ?? null,
+                    cHp: beatmap.cHp ?? null,
+                    cSr: beatmap.cSr ?? null,
+                    cAr: beatmap.cAr ?? null,
+                    cBpm: beatmap.cBpm ?? null,
+                    mods: beatmap.mods ?? null
+                }
+            });
+        } catch (error) {
+            Logger.errorCatch('DB.SAVE_BEATMAP', error);
+            await notifier.send(`Failed to save beatmap for beatmap ${beatmap.beatmapId}: ${error.message}`, 'DB.SAVE_BEATMAP');
         }
     }
 

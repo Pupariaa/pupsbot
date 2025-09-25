@@ -79,7 +79,6 @@ async function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unkn
         ? `J'ai trouvé cette beatmap que tu n'as probablement pas faite, d'après ${linkScore} ! ↪ ${linkBeatmap} (${selected.version}) ${osuUtils.ModsIntToString(selected.mods)} | Estimation du gain de PP : ${ppText} | Durée : ${duration} | ${stars} | ${stats} | Rankup cible ${target}`
         : `I found this beatmap that you probably haven’t played, based on ${linkScore} ! ↪ ${linkBeatmap} (${selected.version}) ${osuUtils.ModsIntToString(selected.mods)} | Estimate of PP gain: ${ppText} | Duration: ${duration} | ${stars} | ${stats} | Target rankup ${target}`;
 
-    console.log(beatmapInfo);
     return {
         message: `${infoPrefix}${messageBody}`,
         beatmap: {

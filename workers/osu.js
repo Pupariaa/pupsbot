@@ -245,22 +245,24 @@ process.on('message', async (data) => {
         }
 
         const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
+        const message = response.message;
         await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
-        await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP);
+        await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods);
         await metricsCollector.recordStepDuration(data.event.id, 'save_suggestion');
 
         await metricsCollector.updateCommandResult(data.event.id, 'success');
 
-        await redisStore.addSuggestion(selected.beatmap_id, data.user.id);
+        await redisStore.addSuggestion(selected.beatmap_id, data.user.id, selected.mods);
         await metricsCollector.recordStepDuration(data.event.id, 'add_suggestion_redis');
 
         elapsed = Date.now() - startTime;
-        await db.saveCommandHistory(data.event.id, data.event.message, response, data.user.id, data.event.nick, true, elapsed, data.user.locale);
+        await db.saveCommandHistory(data.event.id, data.event.message, message, data.user.id, data.event.nick, true, elapsed, data.user.locale);
+        await db.saveBeatmap(response.beatmap);
         await metricsCollector.recordStepDuration(data.event.id, 'save_command_history');
 
         process.send({
             username: data.event.nick,
-            response,
+            response: message,
             id: data.event.id,
             beatmapId: selected.beatmap_id,
             userId: data.user.id,

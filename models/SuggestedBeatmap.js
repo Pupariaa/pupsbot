@@ -7,7 +7,9 @@ module.exports = (sequelizeInstance) => {
         Date: DataTypes.DATE,
         pp_target: DataTypes.FLOAT,
         event_id: DataTypes.BIGINT,
-        pp_earled: DataTypes.FLOAT
+        pp_earled: DataTypes.FLOAT,
+        mods: DataTypes.INTEGER,
+        nv: DataTypes.INTEGER,
     }, {
         tableName: 'suggested_beatmaps',
         timestamps: false

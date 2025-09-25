@@ -86,6 +86,7 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'get_top100_cache');
 
         if (!top100) {
+            Logger.service(`Top100 cache miss for user ${data.user.id} - fetching directly from API`);
             top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
             await metricsCollector.recordStepDuration(data.event.id, 'get_top100_api');
             if (top100) {
@@ -93,6 +94,7 @@ process.on('message', async (data) => {
                 await metricsCollector.recordStepDuration(data.event.id, 'record_top100_cache');
             }
         } else {
+            Logger.service(`Top100 cache hit for user ${data.user.id} - refreshing in background`);
             setImmediate(async () => {
                 try {
                     const freshTop100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);

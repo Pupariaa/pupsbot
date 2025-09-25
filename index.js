@@ -35,6 +35,7 @@ global.activeWorkers = [];
     workerMonitor.startMonitoring();
 
     global.workerMonitor = workerMonitor;
+    global.botHealthMonitor = healthMonitor;
 
     const trackers = [];
 

@@ -156,7 +156,7 @@ class Performe {
         }
     }
 
-    async addSuggestion(bmid, userId, ttl = 604800) {
+    async addSuggestion(bmid, userId, mods, ttl = 604800) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();
 
@@ -165,6 +165,8 @@ class Performe {
             await this._ensureReady();
             const key = `user:${userId}:suggested`;
             await this._redis.sAdd(key, bmid);
+            await this._redis.sAdd(key, mods ? mods : 0);
+            await this._redis.sAdd(key, startTime.toString());
             await this._redis.expire(key, ttl);
 
             const duration = Date.now() - startTime;

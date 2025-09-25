@@ -125,10 +125,6 @@ class BotHealthMonitor {
 
             await this.metricsCollector.setRedisData('workers', JSON.stringify(workerData));
 
-            if (activeWorkers.length > 0) {
-                Logger.service(`BotHealthMonitor: Updated Redis with ${activeWorkers.length} active workers`);
-            }
-
         } catch (error) {
             Logger.errorCatch('BotHealthMonitor.updateWorkerDataInRedis', error);
             await this.metricsCollector.setRedisData('workers', JSON.stringify({

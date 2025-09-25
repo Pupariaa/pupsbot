@@ -31,6 +31,9 @@ class OsuApiV2 {
             await performe.init();
             await metricsCollector.init();
 
+            // Log detailed API call information
+            Logger.service(`OsuApiV2: ${operationName} → ${endpoint}`);
+
             const t = performe.startTimer();
             const accessToken = await this.auth.getValidAccessToken();
 
@@ -93,8 +96,48 @@ class OsuApiV2 {
         }
     }
     async getUser(user, mode = 'osu') {
-        const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
-        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
+        const startTime = Date.now();
+        const performe = new RedisStore();
+        const metricsCollector = new MetricsCollector();
+
+        try {
+            await performe.init();
+            await metricsCollector.init();
+
+            // Check Redis cache first (try both username and id as keys)
+            let cachedProfile = await performe.getCachedProfile(user);
+            if (cachedProfile) {
+                const duration = Date.now() - startTime;
+                await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'v2_cache');
+                console.log(`OsuApiV2: Profile cache hit for user ${user}: ${cachedProfile.username}`);
+                return cachedProfile;
+            }
+
+            // Cache miss - fetch from API
+            console.log(`OsuApiV2: Profile cache miss for user ${user}, fetching from API`);
+
+            const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
+            const userData = await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
+
+            const profileData = {
+                id: userData.id,
+                username: userData.username,
+                pp: userData.statistics?.pp || 0,
+                locale: userData.country_code || 'XX'
+            };
+
+            // Cache the profile data with both username and id as keys
+            await performe.setCachedProfile(profileData.id, profileData);
+            await performe.setCachedProfile(profileData.username, profileData);
+
+            return userData; // Return original data for compatibility
+        } catch (error) {
+            console.error(`OsuApiV2 getUser failed for ${user}:`, error.message);
+            throw error;
+        } finally {
+            await performe.close();
+            await metricsCollector.close();
+        }
     }
     async getUserBestScores(userId, options = {}) {
         const {

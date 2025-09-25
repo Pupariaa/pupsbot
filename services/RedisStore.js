@@ -304,6 +304,65 @@ class Performe {
             await metricsCollector.close();
         }
     }
+
+    async getCachedProfile(userId) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `profile:${userId}`;
+            const cachedData = await this._redis.get(key);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'getCachedProfile', duration);
+
+            if (!cachedData) return null;
+
+            // Reset TTL to 5 minutes when accessed
+            await this._redis.expire(key, 300);
+
+            return JSON.parse(cachedData);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_CACHED_PROFILE', error);
+            return null;
+        } finally {
+            await metricsCollector.close();
+        }
+    }
+
+    async setCachedProfile(userId, profileData) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `profile:${userId}`;
+
+            const cacheData = {
+                id: profileData.id || profileData.user_id,
+                username: profileData.username,
+                pp: profileData.pp || profileData.statistics?.pp || 0,
+                locale: profileData.country_code || profileData.country || 'XX',
+                cached_at: Date.now()
+            };
+
+            await this._redis.set(key, JSON.stringify(cacheData), { EX: 300 }); // 5 minutes TTL
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'setCachedProfile', duration);
+
+            Logger.service(`Cached profile for user ${userId}: ${cacheData.username} (${cacheData.pp}pp)`);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.SET_CACHED_PROFILE', error);
+        } finally {
+            await metricsCollector.close();
+        }
+    }
 }
 
 module.exports = Performe;

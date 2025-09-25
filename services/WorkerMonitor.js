@@ -35,9 +35,6 @@ class WorkerMonitor {
         this.workers.set(workerId, workerInfo);
 
         global.activeWorkers.push(workerInfo);
-
-        Logger.service(`WorkerMonitor: Added worker ${workerId} (${workerType}) for user ${username}`);
-        Logger.service(`WorkerMonitor: Total workers now: ${this.workers.size}, Global workers: ${global.activeWorkers.length}`);
         workerProcess.on('exit', (code, signal) => {
             this.removeWorker(workerId, code, signal);
         });
@@ -47,12 +44,10 @@ class WorkerMonitor {
             this.removeWorker(workerId, null, 'error');
         });
 
-        // Force immediate stats update for new worker
         setTimeout(async () => {
             await this.updateWorkerStats(workerId);
         }, 100);
 
-        // Force Redis update after worker addition
         this.forceRedisUpdate();
 
         return workerId;
@@ -84,10 +79,8 @@ class WorkerMonitor {
             global.activeWorkers.splice(globalIndex, 1);
         }
 
-        const exitReason = signal ? `signal ${signal}` : `code ${exitCode}`;
-        Logger.service(`WorkerMonitor: Removed worker ${workerId} after ${Math.round(duration / 1000)}s (${exitReason})`);
+        // const exitReason = signal ? `signal ${signal}` : `code ${exitCode}`;
 
-        // Force Redis update after worker removal
         this.forceRedisUpdate();
     }
 
@@ -118,8 +111,6 @@ class WorkerMonitor {
                 globalWorker.lastUpdate = workerInfo.lastUpdate;
             }
 
-            // Log successful update
-            Logger.service(`WorkerMonitor: Updated stats for worker ${workerId} - CPU: ${cpuUsage.toFixed(2)}%, Memory: ${memoryUsage}MB`);
         } catch (error) {
             Logger.errorCatch('WorkerMonitor', `Failed to update stats for worker ${workerId}: ${error.message}`);
         }
@@ -143,17 +134,13 @@ class WorkerMonitor {
 
             if (typeof process.cpuUsage === 'function') {
                 const currentCpu = process.cpuUsage();
-                const currentTime = (currentCpu.user + currentCpu.system) / 1000000; // Convert to seconds
+                const currentTime = (currentCpu.user + currentCpu.system) / 1000000;
 
                 if (previous) {
-                    const timeDelta = (now - previous.time) / 1000; // Convert to seconds
+                    const timeDelta = (now - previous.time) / 1000;
                     const cpuDelta = currentTime - previous.cpu;
 
-                    // Calculate CPU percentage based on time delta
-                    // CPU usage = (CPU time used / Wall time) * 100
                     const cpuPercent = timeDelta > 0 ? (cpuDelta / timeDelta) * 100 : 0;
-
-                    // Store current values for next calculation
                     this._previousCpuTimes.set(workerId, {
                         time: now,
                         cpu: currentTime
@@ -161,14 +148,10 @@ class WorkerMonitor {
 
                     const result = Math.max(0, Math.min(100, cpuPercent));
 
-                    // Log for debugging
-                    if (result > 0.1) {
-                        Logger.service(`WorkerMonitor: Worker ${workerId} CPU: ${result.toFixed(2)}% (delta: ${cpuDelta.toFixed(4)}s, time: ${timeDelta.toFixed(2)}s)`);
-                    }
+
 
                     return result;
                 } else {
-                    // First measurement
                     this._previousCpuTimes.set(workerId, {
                         time: now,
                         cpu: currentTime
@@ -177,10 +160,7 @@ class WorkerMonitor {
                 }
             }
 
-            // Fallback: estimate based on process activity
-            // Workers typically use 1-5% CPU during processing
-            const estimatedCPU = Math.random() * 4 + 1; // 1-5% estimate
-            Logger.service(`WorkerMonitor: Worker ${workerId} CPU estimated: ${estimatedCPU.toFixed(2)}%`);
+            const estimatedCPU = Math.random() * 4 + 1;
             return estimatedCPU;
         } catch (error) {
             Logger.errorCatch('WorkerMonitor.getProcessCPUUsage', error);
@@ -199,20 +179,11 @@ class WorkerMonitor {
 
             if (typeof process.memoryUsage === 'function') {
                 const memUsage = process.memoryUsage();
-                // Return RSS (Resident Set Size) - actual physical memory used
-                const result = Math.round(memUsage.rss / 1024 / 1024 * 100) / 100; // Convert to MB
-
-                // Log for debugging
-                if (result > 10) {
-                    Logger.service(`WorkerMonitor: Worker ${process.pid} Memory: ${result}MB`);
-                }
-
+                const result = Math.round(memUsage.rss / 1024 / 1024 * 100) / 100;
                 return result;
             }
 
-            // Fallback: estimate based on typical worker memory usage
-            const estimatedMemory = Math.round((Math.random() * 30 + 20) * 100) / 100; // 20-50MB estimate
-            Logger.service(`WorkerMonitor: Worker ${process.pid || 'unknown'} Memory estimated: ${estimatedMemory}MB`);
+            const estimatedMemory = Math.round((Math.random() * 30 + 20) * 100) / 100;
             return estimatedMemory;
         } catch (error) {
             Logger.errorCatch('WorkerMonitor.getProcessMemoryUsage', error);
@@ -233,7 +204,6 @@ class WorkerMonitor {
                 await this.updateWorkerStats(workerId);
             }
 
-            // Trigger Redis update after stats collection
             if (global.botHealthMonitor) {
                 try {
                     await global.botHealthMonitor.updateWorkerDataInRedis();
@@ -242,8 +212,6 @@ class WorkerMonitor {
                 }
             }
         }, this.monitoringIntervalMs);
-
-        Logger.service('WorkerMonitor: Started monitoring workers');
     }
 
     /**
@@ -254,7 +222,6 @@ class WorkerMonitor {
             clearInterval(this.monitoringInterval);
             this.monitoringInterval = null;
         }
-        Logger.service('WorkerMonitor: Stopped monitoring workers');
     }
 
     /**
@@ -296,10 +263,6 @@ class WorkerMonitor {
             workerCount: this.workers.size
         };
 
-        // Log totals for debugging
-        if (this.workers.size > 0) {
-            Logger.service(`WorkerMonitor: Total resources - CPU: ${result.cpu}%, Memory: ${result.memory}MB, Workers: ${result.workerCount}`);
-        }
 
         return result;
     }
@@ -308,11 +271,9 @@ class WorkerMonitor {
      * Force Redis update (called when workers are added/removed)
      */
     async forceRedisUpdate() {
-        Logger.service(`WorkerMonitor: forceRedisUpdate called, global.botHealthMonitor exists: ${!!global.botHealthMonitor}`);
         if (global.botHealthMonitor) {
             try {
                 await global.botHealthMonitor.updateWorkerDataInRedis();
-                Logger.service('WorkerMonitor: Redis update completed successfully');
             } catch (error) {
                 Logger.errorCatch('WorkerMonitor.forceRedisUpdate', error);
             }

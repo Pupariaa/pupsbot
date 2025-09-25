@@ -2,12 +2,14 @@ const OsuApiV1 = require('./OsuApiV1');
 const OsuApiV2 = require('./OsuApiV2');
 const Logger = require('../utils/Logger');
 const MetricsCollector = require('./MetricsCollector');
+const RedisStore = require('./RedisStore');
 
 class OsuApiWrapper {
     constructor() {
         this.preferV2 = true;
         this.v2Available = false;
         this.osuApiV2 = null;
+        this.redisStore = new RedisStore();
         this.checkV2Availability();
     }
 
@@ -47,6 +49,7 @@ class OsuApiWrapper {
 
             if (this.preferV2 && this.v2Available && this.osuApiV2) {
                 try {
+                    Logger.service(`OsuApiWrapper: Using V2 for getUser(${username})`);
                     const userV2 = await this.osuApiV2.getUser(username, 'osu');
                     const duration = Date.now() - startTime;
                     await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'wrapper_v2');
@@ -219,6 +222,7 @@ class OsuApiWrapper {
 
         if (this.v2Available && this.osuApiV2) {
             try {
+                Logger.service(`OsuApiWrapper: Using V2 for getBeatmapStarRating(${beatmapId}, mods: ${mods})`);
                 return await this.osuApiV2.getBeatmapStarRating(beatmapId, mods, ruleset);
             } catch (error) {
                 Logger.errorCatch('OsuApiWrapper', `V2 getBeatmapStarRating failed: ${error.message}`);
@@ -237,6 +241,7 @@ class OsuApiWrapper {
 
         if (this.v2Available && this.osuApiV2) {
             try {
+                Logger.service(`OsuApiWrapper: Using V2 for getBeatmapAttributes(${beatmapId}, ${JSON.stringify(options)})`);
                 return await this.osuApiV2.getBeatmapAttributes(beatmapId, options);
             } catch (error) {
                 Logger.errorCatch('OsuApiWrapper', `V2 getBeatmapAttributes failed: ${error.message}`);
@@ -262,6 +267,65 @@ class OsuApiWrapper {
             }
         } else {
             throw new Error('Batch Star Rating with mods requires API V2 (not available in V1)');
+        }
+    }
+
+    async getProfile(userId) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+
+            // Check Redis cache first
+            const cachedProfile = await this.redisStore.getCachedProfile(userId);
+            if (cachedProfile) {
+                const duration = Date.now() - startTime;
+                await metricsCollector.recordServicePerformance('api', 'getProfile', duration, 'cache');
+                Logger.service(`Profile cache hit for user ${userId}: ${cachedProfile.username}`);
+                return cachedProfile;
+            }
+
+            // Cache miss - fetch from API
+            Logger.service(`Profile cache miss for user ${userId}, fetching from API`);
+
+            let profileData;
+            if (this.preferV2 && this.v2Available && this.osuApiV2) {
+                try {
+                    const userV2 = await this.osuApiV2.getUser(userId, 'osu');
+                    profileData = {
+                        id: userV2.id,
+                        username: userV2.username,
+                        pp: userV2.statistics?.pp || 0,
+                        locale: userV2.country_code || 'XX'
+                    };
+                } catch (error) {
+                    Logger.errorCatch('OsuApiWrapper', `V2 getUser failed: ${error.message}`);
+                    throw error;
+                }
+            } else {
+                const userV1 = await OsuApiV1.getUser(userId, userId);
+                profileData = {
+                    id: userV1.id,
+                    username: userV1.username,
+                    pp: userV1.pp,
+                    locale: 'XX' // V1 doesn't provide country
+                };
+            }
+
+            // Cache the profile data
+            await this.redisStore.setCachedProfile(userId, profileData);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('api', 'getProfile', duration, 'api');
+
+            return profileData;
+
+        } catch (error) {
+            Logger.errorCatch('OsuApiWrapper', `getProfile failed for user ${userId}: ${error.message}`);
+            throw error;
+        } finally {
+            await metricsCollector.close();
         }
     }
 

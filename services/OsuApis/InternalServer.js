@@ -69,7 +69,9 @@ class OsuApiInternalServer {
         this.app.get('/user/:userId/full', async (req, res) => {
             try {
                 const { userId } = req.params;
-                const fullUser = await this.apiManager.v2.getFullUser(userId);
+                const fullUser = await this.apiManager.rateLimiter.executeRequest(async () => {
+                    return await this.apiManager.v2.getFullUser(userId);
+                });
                 res.json({
                     success: true,
                     data: fullUser

@@ -6,14 +6,14 @@ function analyzeUserMods(top100Scores) {
         return null;
     }
 
+    Logger.service(`[MODS-ANALYZER] Analyzing ${top100Scores.length} scores`);
+
     const modsDistribution = {};
     const modsWeights = {};
     let totalScores = 0;
     let totalPP = 0;
 
     for (const score of top100Scores) {
-        if (!score.enabled_mods) continue;
-
         totalScores++;
         const pp = parseFloat(score.pp) || 0;
         totalPP += pp;
@@ -55,14 +55,14 @@ function analyzeUserMods(top100Scores) {
         const data = modsDistribution[modsKey];
         const frequencyWeight = data.percentage / 100; // 0-1
         const ppWeight = totalPP > 0 ? (data.totalPP / totalPP) : 0; // 0-1
-        
+
         // Combined weight (frequency + PP contribution)
         modsWeights[modsKey] = (frequencyWeight * 0.6) + (ppWeight * 0.4);
     }
 
     // Sort by weight (descending)
     const sortedMods = Object.entries(modsWeights)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([, a], [, b]) => b - a)
         .map(([mods, weight]) => ({
             mods: mods === 'NM' ? [] : mods.split(','),
             weight: weight,
@@ -80,6 +80,7 @@ function analyzeUserMods(top100Scores) {
     };
 
     Logger.service(`[MODS-ANALYZER] Analyzed ${totalScores} scores, primary mods: ${result.primaryMods.join(',') || 'NM'} (${(result.primaryWeight * 100).toFixed(1)}%)`);
+    Logger.service(`[MODS-ANALYZER] Distribution: ${JSON.stringify(modsDistribution, null, 2)}`);
     
     return result;
 }
@@ -112,7 +113,7 @@ function getModsPreference(userModsAnalysis, requestedMods = []) {
     }
 
     // Find closest match
-    const closestMatch = userModsAnalysis.sortedMods.find(modData => 
+    const closestMatch = userModsAnalysis.sortedMods.find(modData =>
         requestedMods.some(requestedMod => modData.mods.includes(requestedMod))
     );
 

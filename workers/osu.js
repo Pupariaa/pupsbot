@@ -137,8 +137,8 @@ process.on('message', async (data) => {
         // Analyze user mods distribution and preferences
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
-            await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600); // Cache for 1 hour
-            Logger.service(`[WORKER] User mods analysis cached for ${data.user.id}: primary mods ${userModsAnalysis.primaryMods.join(',') || 'NM'} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
+            // await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600); // Cache disabled for now
+            Logger.service(`[WORKER] User mods analysis for ${data.user.id}: primary mods ${userModsAnalysis.primaryMods.join(',') || 'NM'} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
         }
 
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);

@@ -194,9 +194,7 @@ class OsuApiManager {
 
         return scores.map(score => {
             // Debug: log the raw score structure to understand mods format
-            if (score.id && score.mods) {
-                Logger.service(`[DEBUG] Score ${score.id} mods: ${JSON.stringify(score.mods)}`);
-            }
+            Logger.service(`[DEBUG] Raw score structure: ${JSON.stringify(score, null, 2)}`);
 
             return {
                 id: score.id,

@@ -350,7 +350,7 @@ class OsuApiV2 {
                 const rawScores = allScores.map(score => {
                     const modsArray = Array.isArray(score.mods) ? score.mods : [];
                     const modsBitwise = modsToBitwise(modsArray);
-                    
+
                     const beatmap = score.beatmap || {};
                     const originalStats = {
                         cs: parseFloat(beatmap.cs) || 0,

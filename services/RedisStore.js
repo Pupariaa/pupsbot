@@ -363,6 +363,28 @@ class Performe {
             await metricsCollector.close();
         }
     }
+    async get(key) {
+        await this._ensureReady();
+        return await this._redis.get(key);
+    }
+
+    async setex(key, seconds, value) {
+        await this._ensureReady();
+        return await this._redis.setEx(key, seconds, value);
+    }
+
+    async setTopRanks(userId, topRanks) {
+        await this._ensureReady();
+        const key = `top_ranks:${userId}`;
+        await this._redis.setEx(key, 300, JSON.stringify(topRanks)); // 5 minutes TTL
+    }
+
+    async getTopRanks(userId) {
+        await this._ensureReady();
+        const key = `top_ranks:${userId}`;
+        const data = await this._redis.get(key);
+        return data ? JSON.parse(data) : null;
+    }
 }
 
 module.exports = Performe;

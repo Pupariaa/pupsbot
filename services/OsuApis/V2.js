@@ -1,9 +1,9 @@
 const axios = require('axios');
-const OsuAuth = require('./OsuAuth');
-const RedisStore = require('./RedisStore');
-const Notifier = require('./Notifier');
-const Logger = require('../utils/Logger');
-const MetricsCollector = require('./MetricsCollector');
+const OsuAuth = require('../OsuAuth');
+const RedisStore = require('../RedisStore');
+const Notifier = require('../Notifier');
+const Logger = require('../../utils/Logger');
+const MetricsCollector = require('../MetricsCollector');
 
 class OsuApiV2 {
     constructor() {
@@ -31,7 +31,6 @@ class OsuApiV2 {
             await performe.init();
             await metricsCollector.init();
 
-            // Log detailed API call information
             Logger.service(`OsuApiV2: ${operationName} → ${endpoint}`);
 
             const t = performe.startTimer();
@@ -104,18 +103,17 @@ class OsuApiV2 {
             await performe.init();
             await metricsCollector.init();
 
-            // Check Redis cache first (try both username and id as keys)
             let cachedProfile = await performe.getCachedProfile(user);
             if (cachedProfile) {
                 const duration = Date.now() - startTime;
                 await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'v2_cache');
-                console.log(`OsuApiV2: Profile cache hit for user ${user}: ${cachedProfile.username}`);
-                return cachedProfile;
+                return {
+                    id: cachedProfile.id,
+                    username: cachedProfile.username,
+                    statistics: { pp: cachedProfile.pp },
+                    country: { code: cachedProfile.locale }
+                };
             }
-
-            // Cache miss - fetch from API
-            console.log(`OsuApiV2: Profile cache miss for user ${user}, fetching from API`);
-
             const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
             const userData = await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
 
@@ -123,14 +121,12 @@ class OsuApiV2 {
                 id: userData.id,
                 username: userData.username,
                 pp: userData.statistics?.pp || 0,
-                locale: userData.country_code || 'XX'
+                locale: userData.country?.code || 'XX'
             };
 
-            // Cache the profile data with both username and id as keys
             await performe.setCachedProfile(profileData.id, profileData);
             await performe.setCachedProfile(profileData.username, profileData);
-
-            return userData; // Return original data for compatibility
+            return userData;
         } catch (error) {
             console.error(`OsuApiV2 getUser failed for ${user}:`, error.message);
             throw error;
@@ -215,7 +211,13 @@ class OsuApiV2 {
         }
 
         const endpoint = `/beatmaps/${beatmapId}/scores/users/${userId}?${params.toString()}`;
-        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEATMAPSCORE_V2');
+
+        try {
+            return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEATMAPSCORE_V2');
+        } catch (error) {
+            Logger.errorCatch('OsuApiV2', `getUserBeatmapScore failed for beatmap ${beatmapId}, user ${userId}: ${error.message}`, error);
+            throw error;
+        }
     }
     async searchBeatmaps(options = {}) {
         const {

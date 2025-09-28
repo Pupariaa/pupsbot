@@ -13,7 +13,7 @@ class OsuAuth {
         this.baseUrl = 'https://osu.ppy.sh/oauth';
 
         if (!this.clientId || !this.clientSecret) {
-            Logger.errorCatch('OsuAuth', 'Missing OSU_CLIENT_ID or OSU_CLIENT_SECRET in environment variables');
+            Logger.errorCatch('OsuAuth', `Missing OSU_CLIENT_ID or OSU_CLIENT_SECRET in environment variables. CLIENT_ID: ${this.clientId ? 'SET' : 'MISSING'}, CLIENT_SECRET: ${this.clientSecret ? 'SET' : 'MISSING'}`);
         }
     }
 
@@ -49,6 +49,7 @@ class OsuAuth {
         } catch (error) {
             const msg = `Error getting client credentials token: ${error.response?.data?.error || error.message}`;
             Logger.errorCatch('OsuAuth', msg);
+            Logger.errorCatch('OsuAuth', `Full error: ${JSON.stringify(error.response?.data || error.message)}`);
             await notifier.send(msg, 'OSUAUTH.CLIENT_CREDENTIALS');
             throw new Error(msg);
         } finally {

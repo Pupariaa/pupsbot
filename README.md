@@ -29,19 +29,31 @@ Unlike other bots that simply suggest popular or high-pp maps, Pupsbot uses real
 
 This approach helps avoid repetitive suggestions and gives you fresh maps that are **likely to be within your reach**, but still provide meaningful pp.
 
+The bot uses **multiple algorithms** to calculate optimal PP ranges, with an intelligent fallback system that ensures you always get a suggestion. It analyzes your playstyle preferences (mods, map duration, AR) to prioritize maps that match your gaming habits.
+
 ---
 
 ## How It Works
 
 1. **You send a private message on osu! to the bot account `Puparia`.**
-2. Pupsbot uses the osu! API v1 to fetch your profile and top 200 scores.
+2. Pupsbot uses the osu! API v2 to fetch your profile and top scores.
 3. It identifies a pool of other users with similar total pp and recent trends.
 4. From their top scores, it builds a pool of candidate beatmaps.
-5. The bot filters out:
+5. The bot applies multiple PP range calculation algorithms:
+   - **Conservative**: Safe, achievable targets
+   - **Balanced**: Moderate difficulty increase
+   - **Aggressive**: Challenging but attainable goals
+   - **Base**: Original algorithm
+   - **Dynamic**: Adapts based on user progression
+6. It filters out:
    - Maps that are in your own top 200
    - Maps you've played recently (based on stored play history)
-   - Maps that don’t match your requested filters (if any)
-6. It returns up to 3 suggestions, optimized for pp gain and mod compatibility.
+   - Maps that don't match your requested filters (if any)
+7. The system uses a **3-tier fallback mechanism**:
+   - **Tier 1**: Strict criteria for optimal matches
+   - **Tier 2**: Relaxed criteria if no perfect matches found
+   - **Tier 3**: Accept any valid suggestion to ensure you get a map
+8. Results are **prioritized based on your preferences** (mods, duration, AR) and returned as optimized suggestions.
 
 ---
 
@@ -138,12 +150,15 @@ Old command for the "osu" mode replaced by `!o` (osu) for more consistency
 
 ## Technical Overview
 
-- **API:** Uses osu! API v1 **and** v2
+- **API:** Uses osu! API v2 with Redis caching and rate limiting
 - **IRC:** Powered by `irc-framework` to listen and respond to private messages
 - **Database:** Uses Sequelize with MySQL/MariaDB
 - **Cache:** Redis is used to reduce latency and speed up match-making
 - **Queue:** A controlled queue handles up to 8 simultaneous user requests
-- **Logging:** All responses, errors, API **timings**, and Redis interactions are logged
+- **Rate Limiting:** User-specific rate limiting (2 req/s) and API rate limiting
+- **Algorithms:** Multiple PP range calculation algorithms with fallback system
+- **User Preferences:** Analyzes user's mod preferences and map characteristics
+- **Logging:** Enhanced logging with rotation, colored output, and error tracking
 
 ---
 
@@ -177,14 +192,46 @@ node index.js
 ## Projet Structure
 
 ```bash
-src/
-├── commands/      # Command handling logic
-├── compute/       # Match engine, filters, Algos..
-├── services/      # Queue manager, API, Redis..
-├── models/        # Sequelize DB models
-├── workers/       # Redis and async processors
-├── utils/         # Utils and parsers
-└── index.js       # Main bot entry point
+pupsbot/
+├── commands/           # Command handling logic
+├── compute/           # Match engine, filters, algorithms
+│   └── osu/
+│       ├── algorithms/    # PP range calculation algorithms
+│       │   ├── Base.js
+│       │   ├── Conservative.js
+│       │   ├── Balanced.js
+│       │   ├── Aggressive.js
+│       │   └── Dynamic.js
+│       ├── RefinedGlobalPPRange.js
+│       ├── findScoreByPPRange.js
+│       └── CrossModeProgressionPotential.js
+├── services/          # Core services and APIs
+│   ├── OsuApis/       # Osu API management
+│   │   ├── V1.js
+│   │   ├── V2.js
+│   │   ├── Manager.js
+│   │   ├── InternalServer.js
+│   │   ├── Client.js
+│   │   └── RateLimiter.js
+│   ├── IRC.js         # IRC connection handler
+│   ├── Queue.js       # Request queue manager
+│   ├── Commands.js    # Command dispatcher
+│   ├── RedisStore.js  # Redis cache management
+│   ├── SQL.js         # Database operations
+│   └── UserRateLimiter.js  # User-specific rate limiting
+├── models/            # Sequelize DB models
+├── workers/           # Background processors
+│   └── osu.js         # Main recommendation worker
+├── utils/             # Utilities and helpers
+│   ├── osu/           # Osu-specific utilities
+│   │   ├── analyzeUserMods.js
+│   │   ├── analyzeUserPreferences.js
+│   │   ├── modsToBitwise.js
+│   │   └── PPCalculator.js
+│   ├── Logger.js      # Logging system with rotation
+│   ├── generateId.js
+│   └── functions.js
+└── index.js           # Main bot entry point
 ```
 
 ## Limitations

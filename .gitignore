@@ -9,3 +9,4 @@ logs/application.log
 /scripts
 /exports
 MONITORING_README.md
+/logs

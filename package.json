@@ -1,7 +1,7 @@
 {
   "name": "pupsbot",
-  "version": "2.2.0",
-  "date": "2025-09-21",
+  "version": "2.2.1",
+  "date": "2025-09-28",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -21,12 +21,14 @@
   "dependencies": {
     "@rian8337/osu-base": "^3.3.0",
     "@rian8337/osu-difficulty-calculator": "^3.3.2",
-    "axios": "^1.9.0",
+    "axios": "^1.12.2",
     "chalk": "^5.4.1",
     "child_process": "^1.0.2",
     "cipherforge": "^1.0.3",
     "cli-progress": "^3.12.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "express": "^5.1.0",
     "fs": "^0.0.1-security",
     "googleapis": "^150.0.1",
     "irc-framework": "^4.14.0",

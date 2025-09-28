@@ -87,7 +87,7 @@ class OsuApiV2 {
             if (error.response?.status === 404 && operationName === 'GETUSERBEATMAPSCORE_V2') {
                 throw error; // Re-throw to let getUserBeatmapScore handle it
             }
-            
+
             const msg = `API V2 request failed: ${error.response?.data?.error || error.message}`;
             Logger.errorCatch('OsuApiV2', msg);
             await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
@@ -208,7 +208,8 @@ class OsuApiV2 {
         } = options;
 
         const params = new URLSearchParams({
-            mode
+            mode,
+            legacy_only: 0
         });
 
         if (mods.length > 0) {
@@ -216,7 +217,7 @@ class OsuApiV2 {
         }
 
         const endpoint = `/beatmaps/${beatmapId}/scores/users/${userId}?${params.toString()}`;
-        
+
         try {
             return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEATMAPSCORE_V2');
         } catch (error) {
@@ -225,7 +226,7 @@ class OsuApiV2 {
                 Logger.service(`OsuApiV2: No score found for user ${userId} on beatmap ${beatmapId}`);
                 return null;
             }
-            
+
             Logger.errorCatch('OsuApiV2', `getUserBeatmapScore failed for beatmap ${beatmapId}, user ${userId}: ${error.message}`, error);
             throw error;
         }

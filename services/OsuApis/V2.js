@@ -156,6 +156,10 @@ class OsuApiV2 {
         const endpoint = `/users/${userId}/scores/best?${params.toString()}`;
         return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEST_V2');
     }
+    async getFullUser(userId) {
+        const endpoint = `/users/${userId}/osu`;
+        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETFULLUSER_V2');
+    }
     async getUserRecentScores(userId, options = {}) {
         const {
             mode = 'osu',
@@ -221,7 +225,6 @@ class OsuApiV2 {
         try {
             return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEATMAPSCORE_V2');
         } catch (error) {
-            // 404 means no score exists, which is normal - return null instead of throwing
             if (error.response?.status === 404 || error.message.includes('404') || error.message.includes('Request failed with status code 404')) {
                 Logger.service(`OsuApiV2: No score found for user ${userId} on beatmap ${beatmapId}`);
                 return null;

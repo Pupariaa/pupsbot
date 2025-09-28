@@ -243,9 +243,9 @@ class Logger {
         logger.success('TRACKER', message);
     }
 
-    static errorCatch(context, error) {
+    static errorCatch(context, message, error = null) {
         const logger = new Logger();
-        logger.error(context, 'Unhandled error caught', error);
+        logger.error(context, message, error);
     }
 
     static api(method, url, status, duration, metadata = {}) {

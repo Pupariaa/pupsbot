@@ -33,9 +33,6 @@ class OsuApiV2 {
         try {
             await performe.init();
             await metricsCollector.init();
-
-            Logger.service(`OsuApiV2: ${operationName} → ${endpoint}`);
-
             const t = performe.startTimer();
             const accessToken = await this.auth.getValidAccessToken();
 

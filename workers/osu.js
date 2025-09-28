@@ -13,6 +13,88 @@ const computeCrossModeProgressionPotential = require('../compute/osu/CrossModePr
 const computeTargetPP = require('../compute/osu/targetPP');
 const modsToBitwise = require('../utils/osu/modsToBitwise');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
+const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
+
+function calculatePreferenceScore(score, userStats) {
+    let totalScore = 0;
+    let factors = 0;
+
+    // Mods preference (weight: 40%)
+    if (userStats.modsDistribution) {
+        const modsScore = calculateModsPreferenceScore(score, userStats.modsDistribution);
+        totalScore += modsScore * 0.4;
+        factors += 0.4;
+    }
+
+    // Duration preference (weight: 20%)
+    if (userStats.durationDistribution) {
+        const durationScore = calculateDurationPreferenceScore(score, userStats.durationDistribution);
+        totalScore += durationScore * 0.2;
+        factors += 0.2;
+    }
+
+    // AR preference (weight: 40%)
+    if (userStats.averageStats && score.ar) {
+        const arScore = calculateARPreferenceScore(parseFloat(score.ar), userStats.averageStats);
+        totalScore += arScore * 0.4;
+        factors += 0.4;
+    }
+
+    return factors > 0 ? totalScore / factors : 0;
+}
+
+function calculateModsPreferenceScore(score, userModsDistribution) {
+    if (!score.mods || score.mods === "0" || score.mods === "") {
+        return parseFloat(userModsDistribution['NM']?.percentage || '0');
+    }
+
+    const scoreMods = score.mods.split(',').filter(mod => mod.trim() !== '');
+    let totalPreferenceScore = 0;
+    let modCount = 0;
+
+    scoreMods.forEach(mod => {
+        const modPreference = userModsDistribution[mod];
+        if (modPreference) {
+            totalPreferenceScore += parseFloat(modPreference.percentage);
+            modCount++;
+        }
+    });
+
+    return modCount > 0 ? totalPreferenceScore / modCount : 0;
+}
+
+function calculateDurationPreferenceScore(score, userDurationDistribution) {
+    if (!score.total_length) return 0;
+
+    const length = parseFloat(score.total_length);
+    let userPreference = 0;
+
+    if (length < 120) {
+        userPreference = parseFloat(userDurationDistribution.short?.percentage || '0');
+    } else if (length < 240) {
+        userPreference = parseFloat(userDurationDistribution.medium?.percentage || '0');
+    } else if (length < 360) {
+        userPreference = parseFloat(userDurationDistribution.long?.percentage || '0');
+    } else {
+        userPreference = parseFloat(userDurationDistribution.veryLong?.percentage || '0');
+    }
+
+    return userPreference;
+}
+
+function calculateARPreferenceScore(scoreAR, userAverageStats) {
+    const userAR = parseFloat(userAverageStats.ar || '0');
+    if (userAR === 0) return 0;
+
+    // Calculate how close the score AR is to user's preferred AR
+    const arDifference = Math.abs(scoreAR - userAR);
+
+    // Convert to percentage (closer = higher score)
+    // AR difference of 0 = 100%, difference of 2 = 0%
+    const arScore = Math.max(0, 100 - (arDifference * 50));
+
+    return arScore;
+}
 
 const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
@@ -66,6 +148,9 @@ function pickBestRandomPrecision(filtered) {
 process.on('message', async (data) => {
     GlobalData = data;
 
+    // data.user.id = 17265355
+    // data.user.pp = 13573
+    // data.user.username = "H O R I Z"
     // Check if rate limit is still valid
     if (!data.event.rateLimitValid) {
         Logger.service(`[WORKER] Rate limit invalid for user ${data.user.id}, aborting`);
@@ -94,13 +179,11 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'get_top100_cache');
 
         if (!top100) {
-            Logger.service(`[WORKER] getUserBestScores(${data.user.id}) → Cache miss, fetching from API`);
             top100 = await osuApi.getTopScoresAllModes(data.user.id, data.event.id);
             await metricsCollector.recordStepDuration(data.event.id, 'get_top100_api');
             if (top100) {
                 await redisStore.recordTop100(data.user.id, top100, 300);
                 await metricsCollector.recordStepDuration(data.event.id, 'record_top100_cache');
-                Logger.service(`[WORKER] getUserBestScores(${data.user.id}) → Cached ${top100.osu.tr.length} scores`);
             }
         } else {
             setImmediate(async () => {
@@ -136,17 +219,136 @@ process.on('message', async (data) => {
 
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
-            // await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
-            Logger.service(`[WORKER] User mods analysis for ${data.user.id}: primary mods ${userModsAnalysis.primaryMods.join(',') || 'NM'} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
+            await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
         }
+
+        const userStats = analyzeUserPreferences(top100Osu.tr);
 
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
         await metricsCollector.recordStepDuration(data.event.id, 'compute_cross_mode_progression_potential');
 
-        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum, 'Conservative');
-        await metricsCollector.recordStepDuration(data.event.id, 'compute_refined_global_pprange');
-        const results = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
+        const algorithms = ['Conservative', 'Balanced', 'Aggressive', 'Base', 'Dynamic'];
+        let results = [];
+        let usedAlgorithm = '';
+        let relaxedCriteria = false;
+
+        for (const algorithm of algorithms) {
+            const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum, algorithm);
+            await metricsCollector.recordStepDuration(data.event.id, 'compute_refined_global_pprange');
+
+            const algorithmResults = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
+
+            if (algorithmResults && algorithmResults.length > 0) {
+                const targetPP = computeTargetPP(top100Osu.tr, sum);
+                let filtered = filterByMods(algorithmResults, params.mods, params.allowOtherMods);
+                filtered = filterOutTop100(filtered, top100Osu.table);
+                filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
+
+                let hasValidScore = false;
+                for (const score of filtered) {
+                    const scorePP = parseFloat(score.pp);
+                    let shouldInclude = false;
+
+                    if (params.pp !== null) {
+                        const ppMargin = 15;
+                        shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
+                    } else {
+                        shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+                    }
+
+                    if (shouldInclude) {
+                        hasValidScore = true;
+                        break;
+                    }
+                }
+
+                if (hasValidScore) {
+                    results = algorithmResults;
+                    usedAlgorithm = algorithm;
+                    break;
+                }
+            } else {
+                Logger.service(`[WORKER] Algorithm ${algorithm} found no results, trying next...`);
+            }
+        }
+
+        // Second pass: if no results, try with relaxed criteria
+        if (!results || results.length === 0) {
+            Logger.service(`[WORKER] No results with strict criteria, trying with relaxed filters...`);
+            relaxedCriteria = true;
+
+            for (const algorithm of algorithms) {
+                const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum, algorithm);
+
+                const algorithmResults = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
+
+                if (algorithmResults && algorithmResults.length > 0) {
+                    const targetPP = computeTargetPP(top100Osu.tr, sum);
+                    let filtered = filterByMods(algorithmResults, params.mods, params.allowOtherMods);
+                    filtered = filterOutTop100(filtered, top100Osu.table);
+                    filtered = filtered.filter(score => score.precision < 10).sort((a, b) => b.precision - a.precision); // Relaxed precision
+
+                    let hasValidScore = false;
+                    for (const score of filtered) {
+                        const scorePP = parseFloat(score.pp);
+                        let shouldInclude = false;
+
+                        if (params.pp !== null) {
+                            const ppMargin = 25; // Relaxed PP margin
+                            shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
+                        } else {
+                            shouldInclude = !targetPP || (scorePP >= targetPP - 20 && scorePP <= targetPP + 50); // Relaxed PP range
+                        }
+
+                        if (shouldInclude) {
+                            hasValidScore = true;
+                            break;
+                        }
+                    }
+
+                    if (hasValidScore) {
+                        results = algorithmResults;
+                        usedAlgorithm = algorithm;
+                        break;
+                    } else {
+                        Logger.service(`[WORKER] Algorithm ${algorithm} found ${algorithmResults.length} results but none passed relaxed filters, trying next...`);
+                    }
+                }
+            }
+        }
+
+        // Third pass: if still no results, accept any result from any algorithm
+        if (!results || results.length === 0) {
+            Logger.service(`[WORKER] No results with relaxed criteria, accepting ANY result...`);
+
+            for (const algorithm of algorithms) {
+                const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum, algorithm);
+
+                const algorithmResults = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
+
+                if (algorithmResults && algorithmResults.length > 0) {
+                    let filtered = filterByMods(algorithmResults, params.mods, params.allowOtherMods);
+                    filtered = filterOutTop100(filtered, top100Osu.table);
+
+                    if (filtered.length > 0) {
+                        results = algorithmResults;
+                        usedAlgorithm = algorithm;
+                        relaxedCriteria = true;
+                        Logger.service(`[WORKER] Algorithm ${algorithm} found ${algorithmResults.length} results, accepting ANY valid score with FORCED relaxed criteria`);
+                        break;
+                    }
+                }
+            }
+        }
         await metricsCollector.recordStepDuration(data.event.id, 'find_scores_by_pprange');
+
+        if (results && results.length > 0 && userStats) {
+            results.sort((a, b) => {
+                const scoreA = calculatePreferenceScore(a, userStats);
+                const scoreB = calculatePreferenceScore(b, userStats);
+                return scoreB - scoreA;
+            });
+        }
 
         if (!results || results.length === 0) {
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);
@@ -172,7 +374,12 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
         filtered = filterOutTop100(filtered, top100Osu.table);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
-        filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
+
+        if (relaxedCriteria) {
+            filtered = filtered.filter(score => score.precision < 10).sort((a, b) => b.precision - a.precision);
+        } else {
+            filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
+        }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
 
@@ -186,10 +393,14 @@ process.on('message', async (data) => {
             let shouldInclude = false;
 
             if (params.pp !== null) {
-                const ppMargin = 15;
+                const ppMargin = relaxedCriteria ? 25 : 15;
                 shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
             } else {
-                shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+                if (relaxedCriteria) {
+                    shouldInclude = true;
+                } else {
+                    shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+                }
             }
 
             if (shouldInclude) {
@@ -266,6 +477,8 @@ process.on('message', async (data) => {
         await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
         await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods);
         await metricsCollector.recordStepDuration(data.event.id, 'save_suggestion');
+
+        Logger.service(`[WORKER] Successfully suggested beatmap using ${usedAlgorithm} algorithm${relaxedCriteria ? ' with RELAXED criteria' : ''}`);
 
         await metricsCollector.updateCommandResult(data.event.id, 'success');
 

@@ -27,11 +27,8 @@ async function getUser(username, id) {
         if (cachedProfile) {
             const duration = Date.now() - startTime;
             await metricsCollector.recordServicePerformance('api', 'getUser', duration, 'v1_cache');
-            Logger.service(`OsuApiV1: Profile cache hit for user ${id || username}: ${cachedProfile.username}`);
             return cachedProfile;
         }
-
-        Logger.service(`OsuApiV1: Profile cache miss for user ${id || username}, fetching from API`);
 
         const t = performe.startTimer();
         const { data } = await axios.get(`https://osu.ppy.sh/api/get_user?k=${process.env.OSU_API_KEY}&u=${username}&m=0`);

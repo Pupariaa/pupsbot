@@ -66,8 +66,6 @@ class OsuApiManager {
                 return cachedProfile;
             }
 
-            Logger.service(`[API-CALL] getUser(${user}) → No cache, fetching from OsuAPI V2`);
-
             const userData = await this.rateLimiter.executeRequest(async () => {
                 return await this.v2.getUser(user, mode);
             });
@@ -81,7 +79,6 @@ class OsuApiManager {
             const duration = Date.now() - startTime;
             await this.metrics.recordServicePerformance('api', 'getUser', duration, 'v2');
 
-            Logger.service(`[CACHE-SAVE] getUser(${user}) → Cached: PP:${standardizedData.pp} Locale:${standardizedData.locale} TopRanks:${standardizedData.topRanks || 'N/A'}`);
             return standardizedData;
         } catch (error) {
             const duration = Date.now() - startTime;
@@ -94,7 +91,6 @@ class OsuApiManager {
 
     async refreshUserInBackground(user, mode = 'osu') {
         try {
-            Logger.service(`[BACKGROUND] Starting refresh for getUser(${user})`);
 
             const userData = await this.rateLimiter.executeRequest(async () => {
                 return await this.v2.getUser(user, mode);
@@ -107,7 +103,6 @@ class OsuApiManager {
                 await this.redis.setTopRanks(userData.id, standardizedData.topRanks);
             }
 
-            Logger.service(`[BACKGROUND-UPDATE] getUser(${user}) → Updated cache: PP:${standardizedData.pp} Locale:${standardizedData.locale} TopRanks:${standardizedData.topRanks || 'N/A'}`);
         } catch (error) {
             Logger.errorCatch('OsuApiManager', `Background refresh failed for ${user}: ${error.message}`);
         }
@@ -141,7 +136,6 @@ class OsuApiManager {
                 const duration = Date.now() - startTime;
                 await this.metrics.recordServicePerformance('api', 'getUserBestScores', duration, 'redis');
 
-                Logger.service(`[CACHE-HIT] getUserBestScores(${userId}) → ${Array.isArray(scores) ? scores.length : 'invalid'} scores served instantly`);
                 this.refreshUserBestScoresInBackground(userId, options, cacheKey).catch(error => {
                     Logger.errorCatch('OsuApiManager', `Background refresh failed for best scores ${userId}: ${error.message}`);
                 });
@@ -149,7 +143,6 @@ class OsuApiManager {
                 return scores;
             }
 
-            Logger.service(`[API-CALL] getUserBestScores(${userId}) → No cache, fetching from OsuAPI V2`);
 
             const scores = await this.rateLimiter.executeRequest(async () => {
                 return await this.v2.getUserBestScores(userId, options);
@@ -162,7 +155,6 @@ class OsuApiManager {
             const duration = Date.now() - startTime;
             await this.metrics.recordServicePerformance('api', 'getUserBestScores', duration, 'v2');
 
-            Logger.service(`[CACHE-SAVE] getUserBestScores(${userId}) → Cached ${standardizedScores.length} scores`);
             return standardizedScores;
         } catch (error) {
             const duration = Date.now() - startTime;
@@ -181,7 +173,6 @@ class OsuApiManager {
             const standardizedScores = this.standardizeScoresData(scores);
             await this.redis.setex(cacheKey, 300, JSON.stringify(standardizedScores));
 
-            Logger.service(`[BACKGROUND-UPDATE] getUserBestScores(${userId}) → Updated cache with ${standardizedScores.length} scores`);
         } catch (error) {
             Logger.errorCatch('OsuApiManager', `Background refresh failed for best scores ${userId}: ${error.message}`);
         }
@@ -225,11 +216,8 @@ class OsuApiManager {
             if (cachedBeatmap) {
                 const duration = Date.now() - startTime;
                 await this.metrics.recordServicePerformance('api', 'getBeatmap', duration, 'redis');
-                Logger.service(`OsuApiManager: Beatmap cache hit for ${beatmapId}`);
                 return JSON.parse(cachedBeatmap);
             }
-
-            Logger.service(`OsuApiManager: Cache miss for beatmap ${beatmapId}, fetching from V2 API`);
             const beatmap = await this.rateLimiter.executeRequest(async () => {
                 return await this.v2.getBeatmap(beatmapId);
             });
@@ -269,7 +257,6 @@ class OsuApiManager {
             let topRanks = await this.redis.getTopRanks(userId);
 
             if (topRanks) {
-                Logger.service(`OsuApiManager: Top ranks cache hit for user ${userId}`);
                 return topRanks;
             }
             const userData = await this.getUser(userId);

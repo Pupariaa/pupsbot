@@ -75,6 +75,8 @@ async function findScoresByPPRange(range, mods, id, bpm = null) {
             return { scoreId: id, ...data };
         })
     );
+
+
     await performe.logDuration('RREAD', await t2.stop('RREAD'))
     await performe.logDuration('FSBPR', await t.stop('FSBPR'))
     await performe.close();

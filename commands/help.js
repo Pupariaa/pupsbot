@@ -1,4 +1,4 @@
-const { getUser } = require('../services/OsuApiV1');
+
 const Logger = require('../utils/Logger');
 const ErrorHandler = require('../utils/ErrorHandler');
 const MetricsCollector = require('../services/MetricsCollector');
@@ -11,10 +11,9 @@ module.exports = {
     description: 'Show available commands and their usage',
     usage: '!help',
 
-    async execute(event, args, queue) {
+    async execute(event, args, queue, lastRequests, user = null) {
         const startTime = Date.now();
         const metricsCollector = new MetricsCollector();
-        let user = null;
 
         try {
             await metricsCollector.init();
@@ -25,7 +24,9 @@ module.exports = {
                 id: event.id
             });
 
-            user = await getUser(event.nick, event.id);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
             const isFR = user.locale === 'FR';
 
             const commands = {

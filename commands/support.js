@@ -1,4 +1,3 @@
-const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
@@ -6,7 +5,7 @@ const MetricsCollector = require('../services/MetricsCollector');
 
 module.exports = {
     name: 'support',
-    async execute(event, args, queue) {
+    async execute(event, args, queue, lastRequests, user = null) {
         const db = new Thread2Database();
         const performe = new RedisStore();
         const metricsCollector = new MetricsCollector();
@@ -17,7 +16,10 @@ module.exports = {
             await db.connect();
             await performe.markPending(event.id);
 
-            const u = await getUser(event.nick);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
+            const u = user;
             const responseMessage = u.locale === 'FR'
                 ? `Pour soutenir le projet, voici [https://ko-fi.com/bellafiora le lien kofi] :) Merci ♥`
                 : `To support the project, here is [https://ko-fi.com/bellafiora the kofi link] :) Thanks-u ♥`;

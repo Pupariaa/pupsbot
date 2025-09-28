@@ -1,4 +1,3 @@
-const { getUser } = require('../services/OsuApiV1');
 const Thread2Database = require('../services/SQL');
 const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
@@ -6,7 +5,7 @@ const MetricsCollector = require('../services/MetricsCollector');
 
 module.exports = {
     name: 'mods',
-    async execute(event, _, queue, lastRequests) {
+    async execute(event, _, queue, lastRequests, user = null) {
         const performe = new RedisStore();
         const db = new Thread2Database();
         const metricsCollector = new MetricsCollector();
@@ -17,7 +16,10 @@ module.exports = {
             await performe.markPending(event.id);
             await db.connect();
 
-            const u = await getUser(event.nick);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
+            const u = user;
             const req = lastRequests[event.nick];
 
             if (!req) {

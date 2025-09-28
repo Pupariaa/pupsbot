@@ -1,4 +1,4 @@
-const { getUser } = require('../services/OsuApiV1');
+
 const Thread2Database = require('../services/SQL');
 const fork = require('child_process').fork;
 const RedisStore = require('../services/RedisStore');
@@ -7,7 +7,7 @@ const MetricsCollector = require('../services/MetricsCollector');
 
 module.exports = {
     name: 'fb',
-    async execute(event, args, queue) {
+    async execute(event, args, queue, lastRequests, user = null) {
         const performe = new RedisStore();
         const db = new Thread2Database();
         const metricsCollector = new MetricsCollector();
@@ -23,7 +23,10 @@ module.exports = {
                 return;
             }
             await db.connect();
-            const u = await getUser(event.nick);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
+            const u = user;
 
             const responseMessage = u.locale === 'FR'
                 ? `Merci pour ton retour ♥`

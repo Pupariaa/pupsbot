@@ -1,4 +1,3 @@
-const { getUser } = require('../services/OsuApiV1');
 const Logger = require('../utils/Logger');
 const ErrorHandler = require('../utils/ErrorHandler');
 const MetricsCollector = require('../services/MetricsCollector');
@@ -13,10 +12,9 @@ module.exports = {
     description: 'Show current bot version and update information',
     usage: '!version',
 
-    async execute(event, args, queue) {
+    async execute(event, args, queue, lastRequests, user = null) {
         const startTime = Date.now();
         const metricsCollector = new MetricsCollector();
-        let user = null;
 
         try {
             await metricsCollector.init();
@@ -27,7 +25,9 @@ module.exports = {
                 id: event.id
             });
 
-            user = await getUser(event.nick, event.id);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
             const isFR = user.locale === 'FR';
 
             let version = '5.0.0';
@@ -45,8 +45,8 @@ module.exports = {
             const link = `https://github.com/Pupariaa/pupsbot/tree/v${version}`;
 
             const responseMessage = isFR
-            ? `🚀 Version de Pupsbot: ${version} | 📅 Build: ${buildDate} | ✨ Nouveautés: Sécurité renforcée, logs améliorés, observabilité (Metrics & Health Monitor) | 🔗 ${link}`
-            : `🚀 Pupsbot version: ${version} | 📅 Build: ${buildDate} | ✨ New: Enhanced security, improved logging, observability (Metrics & Health Monitor) | 🔗 ${link}`;
+                ? `🚀 Version de Pupsbot: ${version} | 📅 Build: ${buildDate} | ✨ Nouveautés: Sécurité renforcée, logs améliorés, observabilité (Metrics & Health Monitor) | 🔗 ${link}`
+                : `🚀 Pupsbot version: ${version} | 📅 Build: ${buildDate} | ✨ New: Enhanced security, improved logging, observability (Metrics & Health Monitor) | 🔗 ${link}`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await metricsCollector.updateCommandResult(event.id, 'success');

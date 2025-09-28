@@ -10,14 +10,54 @@ class Logger {
             DEBUG: 3
         };
         this.currentLevel = this.logLevels.INFO;
-        this.logFile = path.join(process.cwd(), 'logs', 'application.log');
+        this.logDir = path.join(process.cwd(), 'logs');
+        this.maxFileSize = 20 * 1024 * 1024; // 20MB
         this._ensureLogDir();
+        this._initializeLogFiles();
     }
 
     _ensureLogDir() {
-        const logDir = path.dirname(this.logFile);
-        if (!fs.existsSync(logDir)) {
-            fs.mkdirSync(logDir, { recursive: true });
+        if (!fs.existsSync(this.logDir)) {
+            fs.mkdirSync(this.logDir, { recursive: true });
+        }
+    }
+
+    _initializeLogFiles() {
+        const timestamp = this._getTimestamp();
+        this.applicationLogFile = path.join(this.logDir, `application-${timestamp}.log`);
+        this.errorLogFile = path.join(this.logDir, `error-${timestamp}.log`);
+    }
+
+    _getTimestamp() {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hour = String(now.getHours()).padStart(2, '0');
+        const minute = String(now.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}-${hour}-${minute}`;
+    }
+
+    _shouldRotateLog(filePath) {
+        try {
+            const stats = fs.statSync(filePath);
+            return stats.size >= this.maxFileSize;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    _rotateLog(filePath) {
+        const timestamp = this._getTimestamp();
+        const ext = path.extname(filePath);
+        const base = path.basename(filePath, ext);
+        const dir = path.dirname(filePath);
+        const rotatedPath = path.join(dir, `${base}-${timestamp}${ext}`);
+
+        try {
+            fs.renameSync(filePath, rotatedPath);
+        } catch (error) {
+            console.error('Failed to rotate log file:', error.message);
         }
     }
 
@@ -34,7 +74,7 @@ class Logger {
         if (typeof message !== 'string') {
             message = String(message);
         }
-        
+
         return message
             .replace(/password[=:]\s*[\w\S]+/gi, 'password=***')
             .replace(/token[=:]\s*[\w\S]+/gi, 'token=***')
@@ -57,22 +97,62 @@ class Logger {
             ...metadata
         };
 
-        const colors = {
-            ERROR: '\x1b[31m',
-            WARN: '\x1b[33m',
-            INFO: '\x1b[36m',
-            DEBUG: '\x1b[35m',
-            SUCCESS: '\x1b[32m'
-        };
+        // Couleurs par type d'opération
+        let color = '\x1b[37m'; // Blanc par défaut
 
-        const color = colors[level] || '\x1b[37m';
+        if (sanitizedMessage.includes('[CACHE-HIT]')) {
+            color = '\x1b[32m'; // Vert pour cache hit
+        } else if (sanitizedMessage.includes('[API-CALL]')) {
+            color = '\x1b[34m'; // Bleu pour API call
+        } else if (sanitizedMessage.includes('[BACKGROUND]')) {
+            color = '\x1b[33m'; // Jaune pour background
+        } else if (sanitizedMessage.includes('[WORKER]')) {
+            color = '\x1b[35m'; // Magenta pour worker
+        } else if (sanitizedMessage.includes('[COMMAND]')) {
+            color = '\x1b[36m'; // Cyan pour command
+        } else if (sanitizedMessage.includes('[V2-CACHE]')) {
+            color = '\x1b[32m'; // Vert pour V2 cache
+        } else if (sanitizedMessage.includes('[V2-API]')) {
+            color = '\x1b[34m'; // Bleu pour V2 API
+        } else if (sanitizedMessage.includes('[V2-SAVE]')) {
+            color = '\x1b[32m'; // Vert pour V2 save
+        } else if (sanitizedMessage.includes('[CACHE-SAVE]')) {
+            color = '\x1b[32m'; // Vert pour cache save
+        } else if (sanitizedMessage.includes('[API-RESPONSE]')) {
+            color = '\x1b[34m'; // Bleu pour API response
+        } else if (sanitizedMessage.includes('[BACKGROUND-RESPONSE]')) {
+            color = '\x1b[33m'; // Jaune pour background response
+        } else if (sanitizedMessage.includes('[BACKGROUND-UPDATE]')) {
+            color = '\x1b[33m'; // Jaune pour background update
+        } else {
+            // Couleurs par niveau de log
+            const levelColors = {
+                ERROR: '\x1b[31m',
+                WARN: '\x1b[33m',
+                INFO: '\x1b[37m',
+                DEBUG: '\x1b[35m',
+                SUCCESS: '\x1b[32m'
+            };
+            color = levelColors[level] || '\x1b[37m';
+        }
+
         const consoleOutput = `${color}[${timestamp}] [${level}] [${category}] ${sanitizedMessage}\x1b[0m`;
 
         console.log(consoleOutput);
 
         try {
             const logLine = JSON.stringify(logEntry) + '\n';
-            fs.appendFileSync(this.logFile, logLine, 'utf8');
+
+            if (this._shouldRotateLog(this.applicationLogFile)) {
+                this._rotateLog(this.applicationLogFile);
+            }
+            fs.appendFileSync(this.applicationLogFile, logLine, 'utf8');
+            if (level === 'ERROR') {
+                if (this._shouldRotateLog(this.errorLogFile)) {
+                    this._rotateLog(this.errorLogFile);
+                }
+                fs.appendFileSync(this.errorLogFile, logLine, 'utf8');
+            }
         } catch (err) {
             console.error('Failed to write to log file:', err.message);
         }

@@ -281,6 +281,51 @@ class Performe {
         }
     }
 
+    async setUserModsAnalysis(userId, modsAnalysis, ttl = 3600) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `user_mods_analysis:${userId}`;
+
+            await this._redis.set(key, JSON.stringify(modsAnalysis), { EX: ttl });
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'setUserModsAnalysis', duration);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.SET_USER_MODS_ANALYSIS', error);
+        } finally {
+            await metricsCollector.close();
+        }
+    }
+
+    async getUserModsAnalysis(userId) {
+        const metricsCollector = new MetricsCollector();
+        const startTime = Date.now();
+
+        try {
+            await metricsCollector.init();
+            await this._ensureReady();
+            const key = `user_mods_analysis:${userId}`;
+            const cachedData = await this._redis.get(key);
+
+            const duration = Date.now() - startTime;
+            await metricsCollector.recordServicePerformance('redis', 'getUserModsAnalysis', duration);
+
+            if (!cachedData) return null;
+            return JSON.parse(cachedData);
+
+        } catch (error) {
+            Logger.errorCatch('PERFORME.GET_USER_MODS_ANALYSIS', error);
+            return null;
+        } finally {
+            await metricsCollector.close();
+        }
+    }
+
     async getTop100(userId) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();

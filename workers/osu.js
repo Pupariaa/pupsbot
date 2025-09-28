@@ -12,6 +12,7 @@ const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
 const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
 const computeTargetPP = require('../compute/osu/targetPP');
 const modsToBitwise = require('../utils/osu/modsToBitwise');
+const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 
 const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
@@ -132,6 +133,14 @@ process.on('message', async (data) => {
         }
 
         const top100Osu = top100.osu;
+
+        // Analyze user mods distribution and preferences
+        const userModsAnalysis = analyzeUserMods(top100Osu.tr);
+        if (userModsAnalysis) {
+            await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600); // Cache for 1 hour
+            Logger.service(`[WORKER] User mods analysis cached for ${data.user.id}: primary mods ${userModsAnalysis.primaryMods.join(',') || 'NM'} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
+        }
+
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
         await metricsCollector.recordStepDuration(data.event.id, 'compute_cross_mode_progression_potential');
 

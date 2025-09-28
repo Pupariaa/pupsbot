@@ -2,7 +2,6 @@ const path = require('path');
 const fs = require('fs');
 const generateId = require('../utils/generateId');
 const Logger = require('../utils/Logger');
-const { getUser } = require('../services/OsuApiV1');
 const Notifier = require('../services/Notifier');
 const notifier = new Notifier();
 
@@ -30,7 +29,7 @@ class CommandManager {
         }
     }
 
-    async handleMessage(event, queue, lastRequests) {
+    async handleMessage(event, queue, lastRequests, user = null) {
         const content = event.message;
         const parts = content.slice(1).trim().split(' ');
         const commandName = parts[0].toLowerCase();
@@ -40,13 +39,13 @@ class CommandManager {
         const command = this.commands.get(commandName);
 
         if (!command) {
-            return this._handleUnknownCommand(commandName, event, queue);
+            return this._handleUnknownCommand(commandName, event, queue, user);
         }
 
         Logger.task(`Command received: !${commandName} → ${event.id}`);
 
         try {
-            await command.execute(event, args, queue, lastRequests);
+            await command.execute(event, args, queue, lastRequests, user);
         } catch (error) {
             Logger.errorCatch(`CommandManager::${commandName}`, error);
             await notifier.send(
@@ -64,9 +63,11 @@ class CommandManager {
         }
     }
 
-    async _handleUnknownCommand(commandName, event, queue) {
+    async _handleUnknownCommand(commandName, event, queue, user = null) {
         try {
-            const user = await getUser(event.nick, event.id);
+            if (!user) {
+                user = await global.osuApiClient.getUser(event.nick);
+            }
 
             const unknownMessage =
                 user?.locale === 'FR'

@@ -83,6 +83,11 @@ class OsuApiV2 {
                 }
             }
 
+            // Handle 404 as a special case - don't log as error for getUserBeatmapScore
+            if (error.response?.status === 404 && operationName === 'GETUSERBEATMAPSCORE_V2') {
+                throw error; // Re-throw to let getUserBeatmapScore handle it
+            }
+            
             const msg = `API V2 request failed: ${error.response?.data?.error || error.message}`;
             Logger.errorCatch('OsuApiV2', msg);
             await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
@@ -216,7 +221,7 @@ class OsuApiV2 {
             return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEATMAPSCORE_V2');
         } catch (error) {
             // 404 means no score exists, which is normal - return null instead of throwing
-            if (error.message.includes('404') || error.message.includes('Request failed with status code 404')) {
+            if (error.response?.status === 404 || error.message.includes('404') || error.message.includes('Request failed with status code 404')) {
                 Logger.service(`OsuApiV2: No score found for user ${userId} on beatmap ${beatmapId}`);
                 return null;
             }

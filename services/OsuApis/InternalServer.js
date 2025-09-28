@@ -66,6 +66,22 @@ class OsuApiInternalServer {
             }
         });
 
+        this.app.get('/user/:userId/full', async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const fullUser = await this.apiManager.v2.getFullUser(userId);
+                res.json({
+                    success: true,
+                    data: fullUser
+                });
+            } catch (error) {
+                res.status(500).json({
+                    success: false,
+                    error: error.message
+                });
+            }
+        });
+
         this.app.get('/user/:userId/scores/best', async (req, res) => {
             try {
                 const { userId } = req.params;

@@ -46,6 +46,27 @@ class OsuApiClient {
         }
     }
 
+    async getFullUser(userId) {
+        try {
+            const response = await this.client.get(`/user/${userId}/full`);
+
+            if (!response.data.success) {
+                throw new Error(response.data.error);
+            }
+
+            return response.data.data;
+        } catch (error) {
+            if (error.code === 'ECONNREFUSED') {
+                Logger.errorCatch('OsuApiClient', `Connection refused to internal server for getFullUser(${userId}). Is the server running on port 25586?`);
+            } else if (error.response) {
+                Logger.errorCatch('OsuApiClient', `HTTP ${error.response.status} for getFullUser(${userId}): ${error.response.data?.error || error.message}`);
+            } else {
+                Logger.errorCatch('OsuApiClient', `getFullUser failed for ${userId}: ${error.message}`);
+            }
+            throw error;
+        }
+    }
+
     async getUserBestScores(userId, options = {}) {
         try {
             const params = {

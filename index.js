@@ -14,13 +14,13 @@ const BotHealthMonitor = require('./services/BotHealthMonitor');
 const WorkerMonitor = require('./services/WorkerMonitor');
 const OsuApiInternalServer = require('./services/OsuApis/InternalServer');
 const OsuApiClient = require('./services/OsuApis/Client');
+const UserRateLimiter = require('./services/UserRateLimiter');
 const notifier = new Notifier();
 
-let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer;
+let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, userRateLimiter;
 global.temp = [];
 global.activeWorkers = [];
 global.userRequest = [];
-
 
 (async () => {
 
@@ -30,6 +30,7 @@ global.userRequest = [];
     healthMonitor = new BotHealthMonitor();
     workerMonitor = new WorkerMonitor();
     osuApiInternalServer = new OsuApiInternalServer(25586);
+    userRateLimiter = new UserRateLimiter(2, 30000); // 2 req/sec, 30s block
 
     await performe.init();
     await metricsCollector.init();
@@ -142,6 +143,11 @@ global.userRequest = [];
         await runTrackers();
     }, 1000);
 
+    // Cleanup rate limiter every hour
+    setInterval(() => {
+        userRateLimiter.cleanup();
+    }, 60 * 60 * 1000);
+
     const lastRequests = {};
     let ircBot, queue, commandManager;
 
@@ -175,6 +181,15 @@ global.userRequest = [];
     ircBot?.onAction(async ({ target, message, nick }) => {
         try {
             if (target !== process.env.IRC_USERNAME) return;
+
+            // Check user rate limit FIRST, before any processing
+            const rateLimitResult = userRateLimiter.checkRateLimit(nick);
+            if (!rateLimitResult.allowed) {
+                const message = userRateLimiter.getBlockMessage(rateLimitResult);
+                await queue.addToQueue(nick, message, true, generateId(), true);
+                userRateLimiter.logRateLimit(nick, rateLimitResult);
+                return;
+            }
 
             const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
             if (!beatmapId) return;
@@ -216,6 +231,19 @@ global.userRequest = [];
         try {
             if (event.target.toLowerCase() === process.env.IRC_USERNAME.toLowerCase()) {
                 if (!event.message.trim().startsWith('!')) return;
+
+                // Check user rate limit FIRST, before any processing
+                const rateLimitResult = userRateLimiter.checkRateLimit(event.nick);
+                if (!rateLimitResult.allowed) {
+                    const message = userRateLimiter.getBlockMessage(rateLimitResult);
+                    await queue.addToQueue(event.nick, message, true, generateId(), true);
+                    userRateLimiter.logRateLimit(event.nick, rateLimitResult);
+                    return;
+                }
+
+                // Add rate limit info to event for worker validation
+                event.rateLimitValid = true;
+
                 let user = null;
                 try {
                     user = await global.osuApiClient.getUser(event.nick);

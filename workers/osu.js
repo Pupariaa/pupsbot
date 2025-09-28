@@ -13,7 +13,7 @@ const computeCrossModeProgressionPotential = require('../compute/osu/CrossModePr
 const computeTargetPP = require('../compute/osu/targetPP');
 const modsToBitwise = require('../utils/osu/modsToBitwise');
 
-const osuApi = new OsuApiClient('http://localhost:3001');
+const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
 
 let GlobalData;
@@ -64,6 +64,13 @@ function pickBestRandomPrecision(filtered) {
 
 process.on('message', async (data) => {
     GlobalData = data;
+
+    // Check if rate limit is still valid
+    if (!data.event.rateLimitValid) {
+        Logger.service(`[WORKER] Rate limit invalid for user ${data.user.id}, aborting`);
+        return;
+    }
+
     const db = new Thread2Database();
     const redisStore = new RedisStore();
     const metricsCollector = new MetricsCollector();

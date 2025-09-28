@@ -4,6 +4,9 @@ const RedisStore = require('../RedisStore');
 const Notifier = require('../Notifier');
 const Logger = require('../../utils/Logger');
 const MetricsCollector = require('../MetricsCollector');
+const modsToBitwise = require('../../utils/osu/modsToBitwise');
+const osu_utils = require('osu-utils');
+const osuUtils = new osu_utils();
 
 class OsuApiV2 {
     constructor() {
@@ -133,7 +136,6 @@ class OsuApiV2 {
             await performe.setCachedProfile(profileData.username, profileData);
             return userData;
         } catch (error) {
-            console.error(`OsuApiV2 getUser failed for ${user}:`, error.message);
             throw error;
         } finally {
             await performe.close();
@@ -345,18 +347,41 @@ class OsuApiV2 {
                 }
 
 
-                const rawScores = allScores.map(score => ({
-                    beatmap_id: score.beatmap.id.toString(),
-                    date: score.created_at,
-                    pp: score.pp?.toString() || '0',
-                    score_id: score.id?.toString(),
-                    accuracy: ((score.accuracy || 0) * 100).toString(),
-                    max_combo: score.max_combo?.toString() || '0',
-                    perfect: score.perfect ? '1' : '0',
-                    enabled_mods: score.mods?.map(mod => mod.acronym).join('') || '',
-                    user_id: score.user_id?.toString() || userId.toString(),
-                    rank: score.rank || 'F'
-                }));
+                const rawScores = allScores.map(score => {
+                    const modsArray = Array.isArray(score.mods) ? score.mods : [];
+                    const modsBitwise = modsToBitwise(modsArray);
+                    
+                    const beatmap = score.beatmap || {};
+                    const originalStats = {
+                        cs: parseFloat(beatmap.cs) || 0,
+                        od: parseFloat(beatmap.accuracy) || 0,
+                        hp: parseFloat(beatmap.drain) || 0,
+                        ar: parseFloat(beatmap.ar) || 0,
+                        bpm: parseFloat(beatmap.bpm) || 0,
+                        length: parseFloat(beatmap.total_length) || 0
+                    };
+
+                    const realStats = osuUtils.ConvertStatsWithMods(originalStats, 'osu', modsBitwise);
+
+                    return {
+                        beatmap_id: beatmap.id?.toString(),
+                        date: score.created_at,
+                        pp: score.pp?.toString() || '0',
+                        score_id: score.id?.toString(),
+                        accuracy: ((score.accuracy || 0) * 100).toString(),
+                        max_combo: score.max_combo?.toString() || '0',
+                        perfect: score.perfect ? '1' : '0',
+                        enabled_mods: modsArray.join(','),
+                        user_id: score.user_id?.toString() || userId.toString(),
+                        rank: score.rank || 'F',
+                        total_length: realStats.length,
+                        ar: realStats.ar,
+                        bpm: realStats.bpm,
+                        cs: realStats.cs,
+                        od: realStats.od,
+                        hp: realStats.hp
+                    };
+                });
 
                 const scores = rawScores.map(entry => ({
                     beatmap_id: parseInt(entry.beatmap_id, 10),

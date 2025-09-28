@@ -192,22 +192,30 @@ class OsuApiManager {
     standardizeScoresData(scores) {
         if (!Array.isArray(scores)) return [];
 
-        return scores.map(score => ({
-            id: score.id,
-            pp: score.pp || 0,
-            beatmap_id: score.beatmap?.id || score.beatmap_id,
-            beatmapset_id: score.beatmap?.beatmapset_id || score.beatmapset_id,
-            accuracy: score.accuracy || 0,
-            max_combo: score.max_combo || 0,
-            score: score.score || 0,
-            rank: score.rank || 'F',
-            created_at: score.created_at,
-            mode: score.mode || 'osu',
-            mods: score.mods || [],
-            beatmap: score.beatmap,
-            user: score.user,
-            statistics: score.statistics
-        }));
+        return scores.map(score => {
+            // Debug: log the raw score structure to understand mods format
+            if (score.id && score.mods) {
+                Logger.service(`[DEBUG] Score ${score.id} mods: ${JSON.stringify(score.mods)}`);
+            }
+
+            return {
+                id: score.id,
+                pp: score.pp || 0,
+                beatmap_id: score.beatmap?.id || score.beatmap_id,
+                beatmapset_id: score.beatmap?.beatmapset_id || score.beatmapset_id,
+                accuracy: score.accuracy || 0,
+                max_combo: score.max_combo || 0,
+                score: score.score || 0,
+                rank: score.rank || 'F',
+                created_at: score.created_at,
+                mode: score.mode || 'osu',
+                mods: score.mods || [],
+                enabled_mods: score.mods || [], // Map mods to enabled_mods for compatibility
+                beatmap: score.beatmap,
+                user: score.user,
+                statistics: score.statistics
+            };
+        });
     }
 
     async getBeatmap(beatmapId) {

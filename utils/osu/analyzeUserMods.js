@@ -6,7 +6,6 @@ function analyzeUserMods(top100Scores) {
         return null;
     }
 
-    Logger.service(`[MODS-ANALYZER] Analyzing ${top100Scores.length} scores`);
 
     const modsDistribution = {};
     const modsWeights = {};
@@ -80,8 +79,7 @@ function analyzeUserMods(top100Scores) {
     };
 
     Logger.service(`[MODS-ANALYZER] Analyzed ${totalScores} scores, primary mods: ${result.primaryMods.join(',') || 'NM'} (${(result.primaryWeight * 100).toFixed(1)}%)`);
-    Logger.service(`[MODS-ANALYZER] Distribution: ${JSON.stringify(modsDistribution, null, 2)}`);
-    
+
     return result;
 }
 

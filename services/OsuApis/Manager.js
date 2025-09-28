@@ -141,7 +141,6 @@ class OsuApiManager {
                 const duration = Date.now() - startTime;
                 await this.metrics.recordServicePerformance('api', 'getUserBestScores', duration, 'redis');
 
-                const scores = JSON.parse(cachedScores);
                 Logger.service(`[CACHE-HIT] getUserBestScores(${userId}) → ${Array.isArray(scores) ? scores.length : 'invalid'} scores served instantly`);
                 this.refreshUserBestScoresInBackground(userId, options, cacheKey).catch(error => {
                     Logger.errorCatch('OsuApiManager', `Background refresh failed for best scores ${userId}: ${error.message}`);
@@ -168,7 +167,6 @@ class OsuApiManager {
         } catch (error) {
             const duration = Date.now() - startTime;
             await this.metrics.recordServicePerformance('api', 'getUserBestScores', duration, 'error');
-
             Logger.errorCatch('OsuApiManager', `getUserBestScores failed for ${userId}: ${error.message}`);
             throw error;
         }
@@ -193,9 +191,8 @@ class OsuApiManager {
         if (!Array.isArray(scores)) return [];
 
         return scores.map(score => {
-            // Debug: log the raw score structure to understand mods format
-            Logger.service(`[DEBUG] Raw score structure: ${JSON.stringify(score, null, 2)}`);
-
+            const modsArray = score.mods || [];
+            const modsString = modsArray.length > 0 ? modsArray.join(',') : '';
             return {
                 id: score.id,
                 pp: score.pp || 0,
@@ -207,8 +204,8 @@ class OsuApiManager {
                 rank: score.rank || 'F',
                 created_at: score.created_at,
                 mode: score.mode || 'osu',
-                mods: score.mods || [],
-                enabled_mods: score.mods || [], // Map mods to enabled_mods for compatibility
+                mods: modsArray,
+                enabled_mods: modsString,
                 beatmap: score.beatmap,
                 user: score.user,
                 statistics: score.statistics

@@ -134,10 +134,9 @@ process.on('message', async (data) => {
 
         const top100Osu = top100.osu;
 
-        // Analyze user mods distribution and preferences
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
-            // await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600); // Cache disabled for now
+            // await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
             Logger.service(`[WORKER] User mods analysis for ${data.user.id}: primary mods ${userModsAnalysis.primaryMods.join(',') || 'NM'} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
         }
 

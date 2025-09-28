@@ -3,7 +3,7 @@ const RedisStore = require('../services/RedisStore');
 const Thread2Database = require('../services/SQL');
 const MetricsCollector = require('../services/MetricsCollector');
 const Notifier = require('../services/Notifier');
-const OsuApiWrapper = require('../services/OsuApiWrapper');
+const OsuApiClient = require('../services/OsuApis/Client');
 const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
 const { getUserErrorMessage } = require('../utils/UserFacingError');
 const parseCommandParameters = require('../utils/parser/bmParser');
@@ -13,7 +13,7 @@ const computeCrossModeProgressionPotential = require('../compute/osu/CrossModePr
 const computeTargetPP = require('../compute/osu/targetPP');
 const modsToBitwise = require('../utils/osu/modsToBitwise');
 
-const osuApi = new OsuApiWrapper();
+const osuApi = new OsuApiClient('http://localhost:3001');
 const notifier = new Notifier();
 
 let GlobalData;
@@ -86,18 +86,18 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'get_top100_cache');
 
         if (!top100) {
-            Logger.service(`Top100 cache miss for user ${data.user.id} - fetching directly from API`);
-            top100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+            Logger.service(`[WORKER] getUserBestScores(${data.user.id}) → Cache miss, fetching from API`);
+            top100 = await osuApi.getTopScoresAllModes(data.user.id, data.event.id);
             await metricsCollector.recordStepDuration(data.event.id, 'get_top100_api');
             if (top100) {
                 await redisStore.recordTop100(data.user.id, top100, 300);
                 await metricsCollector.recordStepDuration(data.event.id, 'record_top100_cache');
+                Logger.service(`[WORKER] getUserBestScores(${data.user.id}) → Cached ${top100.osu.tr.length} scores`);
             }
         } else {
-            Logger.service(`Top100 cache hit for user ${data.user.id} - refreshing in background`);
             setImmediate(async () => {
                 try {
-                    const freshTop100 = await osuApi.getTop100MultiMods(data.user.id, data.event.id);
+                    const freshTop100 = await osuApi.getTopScoresAllModes(data.user.id, data.event.id);
                     if (freshTop100) {
                         await redisStore.recordTop100(data.user.id, freshTop100, 300);
                     }
@@ -128,7 +128,7 @@ process.on('message', async (data) => {
         const sum = computeCrossModeProgressionPotential(data.user.id, top100);
         await metricsCollector.recordStepDuration(data.event.id, 'compute_cross_mode_progression_potential');
 
-        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum);
+        const { min, max } = await computeRefinedGlobalPPRange(data.user.pp, top100Osu.tr, data.event.ids, sum, 'Conservative');
         await metricsCollector.recordStepDuration(data.event.id, 'compute_refined_global_pprange');
         const results = await findScoresByPPRange({ min, max }, params.mods, data, params.bpm);
         await metricsCollector.recordStepDuration(data.event.id, 'find_scores_by_pprange');
@@ -246,7 +246,7 @@ process.on('message', async (data) => {
             return;
         }
 
-        const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods);
+        const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods, osuApi);
         const message = response.message;
         await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
         await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods);

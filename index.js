@@ -5,7 +5,6 @@ const IRCQueueManager = require("./services/Queue");
 const CommandManager = require('./services/Commands');
 const RedisStore = require('./services/RedisStore');
 const calculatePPWithMods = require('./utils/osu/PPCalculator');
-const { getUser, hasUserPlayedMap } = require('./services/OsuApiV1');
 const Logger = require('./utils/Logger');
 const generateId = require('./utils/generateId');
 const SQL = require('./services/SQL');
@@ -13,11 +12,14 @@ const MetricsCollector = require('./services/MetricsCollector');
 const Notifier = require('./services/Notifier');
 const BotHealthMonitor = require('./services/BotHealthMonitor');
 const WorkerMonitor = require('./services/WorkerMonitor');
+const OsuApiInternalServer = require('./services/OsuApis/InternalServer');
+const OsuApiClient = require('./services/OsuApis/Client');
 const notifier = new Notifier();
 
-let healthMonitor, performe, metricsCollector, workerMonitor;
+let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer;
 global.temp = [];
 global.activeWorkers = [];
+global.userRequest = [];
 
 
 (async () => {
@@ -27,15 +29,20 @@ global.activeWorkers = [];
     const db = new SQL();
     healthMonitor = new BotHealthMonitor();
     workerMonitor = new WorkerMonitor();
+    osuApiInternalServer = new OsuApiInternalServer(25586);
 
     await performe.init();
     await metricsCollector.init();
     await healthMonitor.init();
 
     workerMonitor.startMonitoring();
+    await osuApiInternalServer.start();
 
     global.workerMonitor = workerMonitor;
     global.botHealthMonitor = healthMonitor;
+    global.osuApiClient = new OsuApiClient('http://localhost:25586');
+
+    Logger.service('OsuApi internal server started and client available globally');
 
     const trackers = [];
 
@@ -54,10 +61,16 @@ global.activeWorkers = [];
                 const tracker = trackers[index];
                 const suggestionStart = tracker?.start ?? now;
                 const retries = tracker?.retries ?? 0;
-                const played = await hasUserPlayedMap(uid, bmid);
+                let played = null;
+                try {
+                    played = await global.osuApiClient.getUserBeatmapScore(bmid, uid);
+                } catch (error) {
+                    Logger.errorCatch('Tracker', `Failed to get user beatmap score for ${uid} on beatmap ${bmid}: ${error.message}`, error);
+                    played = null;
+                }
 
-                if (played && played.date) {
-                    const parsedDate = new Date(played.date + 'Z');
+                if (played && played.created_at) {
+                    const parsedDate = new Date(played.created_at);
                     if (isNaN(parsedDate.getTime())) {
                         if (index !== -1) trackers.splice(index, 1);
                         return;
@@ -67,8 +80,8 @@ global.activeWorkers = [];
                     const windowStart = suggestionStart - 20 * 60 * 1000;
                     const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
                     if (scoreDate >= windowStart && scoreDate <= windowEnd) {
-                        await db.updateSuggestion(id, played.pp);
-                        Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp} for ID:${id}`);
+                        await db.updateSuggestion(id, played.pp || 0);
+                        Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
                     } else {
                         if (retries < 1) {
                             trackers.splice(index, 1);
@@ -169,7 +182,7 @@ global.activeWorkers = [];
             await metricsCollector.createCommandEntry(id, 'np');
             Logger.task(`Create: /np → ${id}`);
 
-            const user = await getUser(nick);
+            const user = await global.osuApiClient.getUser(nick);
             await metricsCollector.recordStepDuration(id, 'get_user');
             const isFR = user.locale === 'FR';
             const result = await calculatePPWithMods(beatmapId);
@@ -203,7 +216,14 @@ global.activeWorkers = [];
         try {
             if (event.target.toLowerCase() === process.env.IRC_USERNAME.toLowerCase()) {
                 if (!event.message.trim().startsWith('!')) return;
-                await commandManager.handleMessage(event, queue, lastRequests);
+                let user = null;
+                try {
+                    user = await global.osuApiClient.getUser(event.nick);
+                } catch (error) {
+                    Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+                }
+
+                await commandManager.handleMessage(event, queue, lastRequests, user);
             }
         } catch (err) {
             Logger.errorCatch('onMessage', err);
@@ -232,6 +252,11 @@ async function gracefulShutdown() {
             workerMonitor.stopMonitoring();
         }
 
+        if (osuApiInternalServer) {
+            await osuApiInternalServer.stop();
+            Logger.service('OsuApi internal server stopped');
+        }
+
         Logger.service('Graceful shutdown complete');
         process.exit(0);
     } catch (error) {
@@ -250,3 +275,14 @@ process.on('unhandledRejection', (reason, promise) => {
 
 process.on('SIGINT', gracefulShutdown);
 process.on('SIGTERM', gracefulShutdown);
+
+function getOsuApiClient() {
+    if (!global.osuApiClient) {
+        throw new Error('OsuApiClient not initialized. Make sure the server has started properly.');
+    }
+    return global.osuApiClient;
+}
+
+module.exports = {
+    getOsuApiClient
+};

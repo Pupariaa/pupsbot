@@ -1,24 +1,20 @@
 const { formatTime } = require('./functions');
 const osu_utils = require('osu-utils');
 const osuUtils = new osu_utils();
-const OsuApiWrapper = require('../services/OsuApiWrapper');
-
-let osuApi = null;
-function getOsuApi() {
-    if (!osuApi) {
-        osuApi = new OsuApiWrapper();
-    }
-    return osuApi;
-}
 
 
-async function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTokens, unsupportedMods) {
+async function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unknownTokens, unsupportedMods, osuApiClient = null) {
 
     let realSR = null;
     try {
-        const apiWrapper = getOsuApi();
-        const srData = await apiWrapper.getBeatmapStarRating(selected.beatmap_id, selected.mods, 'osu');
-        realSR = srData.star_rating;
+        const client = osuApiClient || global.osuApiClient;
+        if (client) {
+            const srData = await client.getBeatmapStarRating(selected.beatmap_id, selected.mods, 'osu');
+            realSR = srData.star_rating;
+        } else {
+            console.warn('OsuApiClient not initialized');
+            realSR = parseFloat(beatmapInfo.difficultyrating) || parseFloat(selected.stars) || 0;
+        }
     } catch (error) {
         realSR = parseFloat(beatmapInfo.difficultyrating) || parseFloat(selected.stars) || 0;
     }

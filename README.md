@@ -19,24 +19,6 @@ You can join the Discord server to stay informed about future updates, give feed
 <a href="https://techalchemy.fr/pupsbot/pngStats/stats.html">Go to Live statistics</a>
 </p>
 
-## 📊 Dashboard & Monitoring
-
-For detailed insights into Pupsbot's performance, health status, and real-time metrics, visit our comprehensive dashboard:
-
-The dashboard provides:
-- **Real-time bot status** and health monitoring
-- **Performance metrics** and response times
-- **API usage statistics** (V1/V2 hybrid system)
-- **User activity trends** and command usage
-- **System resources** and infrastructure status
-- **Error tracking** and debugging information
-
-Perfect for monitoring bot reliability and understanding usage patterns!
-<p align="center">
-<a href="https://remote.pupsweb.cc">Go to Live Dashboards and Metrics usages</a>
-</p>
----
-
 ## Overview
 
 Unlike other bots that simply suggest popular or high-pp maps, Pupsbot uses real player data to make targeted suggestions. The goal is to help you **farm pp efficiently** by finding beatmaps:

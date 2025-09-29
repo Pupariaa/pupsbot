@@ -148,10 +148,6 @@ function pickBestRandomPrecision(filtered) {
 process.on('message', async (data) => {
     GlobalData = data;
 
-    // data.user.id = 17265355
-    // data.user.pp = 13573
-    // data.user.username = "H O R I Z"
-    // Check if rate limit is still valid
     if (!data.event.rateLimitValid) {
         Logger.service(`[WORKER] Rate limit invalid for user ${data.user.id}, aborting`);
         return;

@@ -220,7 +220,7 @@ class Performe {
             await this._ensureReady();
             const key = `beatmap:${beatmap.beatmap_id}`;
             this._redis.hSet(key, {
-                beatmap_id: beatmap.beatmap_id.toString() || beatmap.id.toString(),
+                beatmap_id: beatmap.beatmap_id ? beatmap.beatmap_id.toString() : beatmap.id.toString(),
                 beatmapset_id: beatmap.beatmapset_id.toString(),
                 title: beatmap.title.toString(),
                 artist: beatmap.artist.toString(),

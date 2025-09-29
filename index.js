@@ -64,7 +64,7 @@ global.userRequest = [];
                 const retries = tracker?.retries ?? 0;
                 let played = null;
                 try {
-                    played = await global.osuApiClient.getUserBeatmapScore(bmid, uid);
+                    played = await global.osuApiClient.getUserBeatmapScore(bmid, uid).score;
                 } catch (error) {
                     Logger.errorCatch('Tracker', `Failed to get user beatmap score for ${uid} on beatmap ${bmid}: ${error.message}`, error);
                     played = null;

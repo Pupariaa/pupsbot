@@ -15,7 +15,7 @@ const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
 const { filterOutTop100, filterByMods, pickBestRandomPrecision } = require('../utils/osu/ScoreFilters');
-const AlgorithmManager = require('../compute/osu/algorithms/AlgorithmManager');
+const AlgorithmManager = require('../managers/AlgorithmManager');
 
 const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();

@@ -13,3 +13,14 @@ Gère l'exécution des algorithmes de calcul de PP avec un système de fallback 
 Supporte 5 algorithmes : Conservative, Balanced, Aggressive, Base, Dynamic.
 
 Fait partie du système de recommandation de beatmaps du worker osu.js.
+
+## GameModeManager.js
+
+Gère les différents modes de jeu osu! et leurs configurations :
+
+- **Parsing des modes** : Conversion des alias (0, 1, 2, 3, std, taiko, etc.)
+- **Validation des modes** : Vérification des modes supportés et activés
+- **Configuration par mode** : Mods par défaut, calculs disponibles, workers associés
+- **Support multilingue** : Alias et noms d'affichage localisés
+
+Modes supportés : osu!, taiko, catch (osu!fruits), mania avec configurations spécifiques.

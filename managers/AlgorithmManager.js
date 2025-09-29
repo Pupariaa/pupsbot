@@ -2,11 +2,11 @@
  * Manages algorithm execution with multi-tier fallback system
  */
 
-const Logger = require('../../../utils/Logger');
-const computeRefinedGlobalPPRange = require('../RefinedGlobalPPRange');
-const findScoresByPPRange = require('../findScoreByPPRange');
-const computeTargetPP = require('../targetPP');
-const { filterByMods, filterOutTop100 } = require('../../../utils/osu/ScoreFilters');
+const Logger = require('../utils/Logger');
+const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
+const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
+const computeTargetPP = require('../compute/osu/targetPP');
+const { filterByMods, filterOutTop100 } = require('../utils/osu/ScoreFilters');
 
 class AlgorithmManager {
     constructor() {
@@ -126,7 +126,7 @@ class AlgorithmManager {
             );
 
             if (algorithmResults && algorithmResults.length > 0) {
-                const targetPP = computeTargetPP(options.top100OsuTr, options.sub);
+                const targetPP = computeTargetPP(options.top100OsuTr, options.sum);
                 let filtered = filterByMods(algorithmResults, options.mods, options.allowOtherMods);
                 filtered = filterOutTop100(filtered, options.data.top100.osu.table);
                 filtered = filtered.filter(score => score.precision < precisionThreshold)

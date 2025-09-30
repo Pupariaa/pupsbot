@@ -67,6 +67,7 @@ class OsuApiManager {
             }
 
             const userData = await this.rateLimiter.executeRequest(async () => {
+
                 return await this.v2.getUser(user, mode);
             });
 
@@ -113,7 +114,7 @@ class OsuApiManager {
             id: userData.id,
             username: userData.username,
             pp: userData.statistics?.pp || 0,
-            locale: userData.country?.code || 'XX',
+            locale: userData.locale || 'XX',
             topRanks: userData.statistics?.global_rank || null,
             country_rank: userData.statistics?.country_rank || null,
             level: userData.statistics?.level?.current || null,
@@ -259,7 +260,6 @@ class OsuApiManager {
             if (topRanks) {
                 return topRanks;
             }
-            const userData = await this.getUser(userId);
             topRanks = await this.redis.getTopRanks(userId);
 
             return topRanks;

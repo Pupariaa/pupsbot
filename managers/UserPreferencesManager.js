@@ -48,8 +48,6 @@ class UserPreferencesManager {
             }
 
             const preferences = JSON.parse(stored);
-            console.log(`[PREFERENCES] Raw stored preferences for ${userId}: ${JSON.stringify(preferences)}`);
-
             // Ensure all required fields exist with defaults
             const finalPreferences = {
                 autoMods: preferences.autoMods !== undefined ? preferences.autoMods : this.defaultPreferences.autoMods,
@@ -65,7 +63,6 @@ class UserPreferencesManager {
                 titleBan: preferences.titleBan || this.defaultPreferences.titleBan
             };
 
-            console.log(`[PREFERENCES] Final preferences for ${userId}: ${JSON.stringify(finalPreferences)}`);
             return finalPreferences;
         } catch (error) {
             Logger.errorCatch('getUserPreferences', error);
@@ -89,7 +86,6 @@ class UserPreferencesManager {
             const sanitizedPreferences = this._sanitizePreferences(preferences);
 
             await this.redis.set(key, JSON.stringify(sanitizedPreferences)); // No TTL = permanent storage
-            Logger.service(`[PREFERENCES] Updated preferences for user ${userId}: ${JSON.stringify(sanitizedPreferences)}`);
         } catch (error) {
             Logger.errorCatch('setUserPreferences', error);
         }
@@ -135,7 +131,6 @@ class UserPreferencesManager {
         try {
             const key = `user_preferences:${userId}`;
             await this.redis.del(key);
-            Logger.service(`[PREFERENCES] Reset preferences for user ${userId} to defaults`);
         } catch (error) {
             Logger.errorCatch('resetUserPreferences', error);
         }

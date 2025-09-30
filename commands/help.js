@@ -41,8 +41,10 @@ module.exports = {
             const commandList = Object.values(commands).join(' | ');
 
             const responseMessage = isFR
-                ? `🤖 Commandes disponibles: ${commandList} | Utilise /np avec une beatmap pour les gains PP | Nouveaux filtres: pp:150 bpm:180 | Exemple: !o HD pp:200 bpm:160`
-                : `🤖 Available commands: ${commandList} | Use /np with a beatmap for PP gains | New filters: pp:150 bpm:180 | Example: !o HD pp:200 bpm:160`;
+                ? `🤖 Commandes disponibles: ${commandList} | Utilise /np avec une beatmap pour les gains PP | Nouveaux filtres: pp:150 bpm:180 | Exemple: !o HD pp:200 bpm:160
+                Si jamais tu as des difficulté tu peux rejoindre ce serveur [https://discord.gg/bJQVPzy2u6 Discord]`
+                : `🤖 Available commands: ${commandList} | Use /np with a beatmap for PP gains | New filters: pp:150 bpm:180 | Example: !o HD pp:200 bpm:160
+                If you have any issues, you can join this server [https://discord.gg/bJQVPzy2u6 Discord]`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await metricsCollector.updateCommandResult(event.id, 'success');

@@ -28,8 +28,26 @@ class AlgorithmManager {
             bpm,
             data,
             allowOtherMods,
-            targetPP
+            targetPP,
+            algorithm
         } = params;
+
+        // If specific algorithm is requested, use only that one
+        if (algorithm && algorithm !== 'Base') {
+            Logger.service(`[ALGORITHM] Using specific algorithm: ${algorithm}`);
+            return await this._trySpecificAlgorithm({
+                userPP,
+                top100OsuTr,
+                eventId,
+                sum,
+                mods,
+                bpm,
+                data,
+                allowOtherMods,
+                targetPP,
+                algorithm
+            });
+        }
 
         // Level 1: Strict criteria
         const strictResult = await this._tryAlgorithms({
@@ -101,6 +119,52 @@ class AlgorithmManager {
             relaxedCriteria: true,
             forcedRelaxed: true
         };
+    }
+
+    /**
+     * Try a specific algorithm only
+     */
+    async _trySpecificAlgorithm(options) {
+        const { algorithm } = options;
+
+        const { min, max } = await computeRefinedGlobalPPRange(
+            options.userPP,
+            options.top100OsuTr,
+            options.eventId,
+            options.sum,
+            algorithm
+        );
+
+        const algorithmResults = await findScoresByPPRange(
+            { min, max },
+            options.mods,
+            options.data,
+            options.bpm
+        );
+
+        if (algorithmResults && algorithmResults.length > 0) {
+            const targetPP = computeTargetPP(options.top100OsuTr, options.sum);
+            const filtered = filterByMods(algorithmResults, options.mods, options.allowOtherMods);
+            const finalResults = filterOutTop100(filtered, options.data.top100.osu.table);
+
+            if (finalResults.length > 0) {
+                Logger.service(`[ALGORITHM] ${algorithm} found ${finalResults.length} results`);
+                return {
+                    results: finalResults,
+                    algorithm: algorithm,
+                    relaxedCriteria: false
+                };
+            }
+        }
+
+        Logger.service(`[ALGORITHM] ${algorithm} found no results, falling back to multi-algorithm strategy`);
+        // Fallback to normal multi-algorithm strategy
+        return await this._tryAlgorithms({
+            ...options,
+            precisionThreshold: 8,
+            ppMargin: 15,
+            ppRange: { start: options.targetPP, end: options.targetPP + 28 }
+        });
     }
 
     /**

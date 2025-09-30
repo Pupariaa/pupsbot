@@ -249,11 +249,28 @@ class Performe {
         if (!id || isNaN(id) || id === 0 || id === '0') return false;
         try {
             await this._ensureReady();
-            const beatmap = await this._redis.hGetAll(`beatmap:${id}`);
-            if (!beatmap.beatmap_id) return false;
-            return beatmap;
+            let beatmap;
+
+            try {
+                beatmap = await this._redis.hGetAll(`beatmap:${id}`);
+                if (beatmap && Object.keys(beatmap).length > 0 && beatmap.beatmap_id) {
+                    return beatmap;
+                }
+            } catch (err) {
+                if (err.message.includes('WRONGTYPE')) {
+                    const raw = await this._redis.get(`beatmap:${id}`);
+                    if (raw) {
+                        beatmap = JSON.parse(raw);
+                        return beatmap;
+                    }
+                }
+                throw err;
+            }
+
+            return false;
         } catch (error) {
             Logger.errorCatch('PERFORME.GET_BEATMAP', error);
+            return false;
         }
     }
 

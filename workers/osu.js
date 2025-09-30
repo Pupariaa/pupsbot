@@ -6,9 +6,7 @@ const Notifier = require('../services/Notifier');
 const OsuApiClient = require('../services/OsuApis/Client');
 const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
 const { getUserErrorMessage } = require('../utils/UserFacingError');
-const parseCommandParameters = require('../utils/parser/bmParser');
-const computeRefinedGlobalPPRange = require('../compute/osu/RefinedGlobalPPRange');
-const findScoresByPPRange = require('../compute/osu/findScoreByPPRange');
+const parseCommandParameters = require('../utils/parser/commandParser');
 const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
 const computeTargetPP = require('../compute/osu/targetPP');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
@@ -16,10 +14,12 @@ const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
 const { filterOutTop100, filterByMods, pickBestRandomPrecision } = require('../utils/osu/ScoreFilters');
 const AlgorithmManager = require('../managers/AlgorithmManager');
+const UserPreferencesManager = require('../managers/UserPreferencesManager');
 
 const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
 const algorithmManager = new AlgorithmManager();
+const userPreferencesManager = new UserPreferencesManager();
 
 let GlobalData;
 
@@ -39,9 +39,10 @@ process.on('message', async (data) => {
 
     try {
         Logger.task('OSU Worker received data, starting processing...');
-
+        await userPreferencesManager.init();
         const user = data.user;
-        const params = parseCommandParameters(data.event.message);
+        const userPreferences = await userPreferencesManager.getUserPreferences(user.id);
+        const params = parseCommandParameters(data.event.message, 'osu', userPreferences);
         const event = data.event;
 
         let top100 = await redisStore.getTop100(user.id);
@@ -99,7 +100,6 @@ process.on('message', async (data) => {
 
         const targetPP = computeTargetPP(top100Osu.tr, sum);
 
-        // Use AlgorithmManager for multi-tier algorithm execution
         const algorithmResult = await algorithmManager.executeAlgorithmStrategy({
             userPP: data.user.pp,
             top100OsuTr: top100Osu.tr,
@@ -109,7 +109,8 @@ process.on('message', async (data) => {
             bpm: params.bpm,
             data: { top100, user: data.user },
             allowOtherMods: params.allowOtherMods,
-            targetPP: params.pp
+            targetPP: params?.pp ? params.pp : targetPP,
+            algorithm: params.algorithm
         });
 
         await metricsCollector.recordStepDuration(data.event.id, 'find_scores_by_pprange');
@@ -133,7 +134,6 @@ process.on('message', async (data) => {
 
         await metricsCollector.recordStepDuration(data.event.id, 'compute_target_pp');
 
-        // Sort results based on user preferences
         if (algorithmResult.results && algorithmResult.results.length > 0 && userStats) {
             algorithmResult.results.sort((a, b) => {
                 const scoreA = calculatePreferenceScore(a, userStats);
@@ -147,7 +147,6 @@ process.on('message', async (data) => {
         filtered = filterOutTop100(filtered, top100Osu.table);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
-        // Apply precision filter
         if (algorithmResult.relaxedCriteria) {
             filtered = filtered.filter(score => score.precision < 10).sort((a, b) => b.precision - a.precision);
         } else {
@@ -161,6 +160,26 @@ process.on('message', async (data) => {
             const mapId = parseInt(score.beatmap_id);
             if (suggestions.includes(mapId.toString())) continue;
 
+            const beatmap = await redisStore.getBeatmap(mapId);
+            if (beatmap) {
+                const mapper = beatmap.creator?.toLowerCase() || '';
+                const title = beatmap.title?.toLowerCase() || '';
+
+                if (userPreferences.mapperBan && userPreferences.mapperBan.length > 0 &&
+                    userPreferences.mapperBan.some(bannedMapper =>
+                        mapper.includes(bannedMapper.toLowerCase())
+                    )) {
+                    continue;
+                }
+
+                if (userPreferences.titleBan && userPreferences.titleBan.length > 0 &&
+                    userPreferences.titleBan.some(bannedTitle =>
+                        title.includes(bannedTitle.toLowerCase())
+                    )) {
+                    continue;
+                }
+            }
+
             const scorePP = parseFloat(score.pp);
             let shouldInclude = false;
 
@@ -171,7 +190,7 @@ process.on('message', async (data) => {
                 if (algorithmResult.relaxedCriteria) {
                     shouldInclude = true;
                 } else {
-                    shouldInclude = !targetPP || (scorePP >= targetPP && scorePP <= targetPP + 28);
+                    shouldInclude = !params.pp || (scorePP >= params.pp && scorePP <= params.pp + 28);
                 }
             }
 
@@ -237,14 +256,14 @@ process.on('message', async (data) => {
         const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods, osuApi);
         const message = response.message;
         await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
-        await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods);
+        await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods, algorithmResult.algorithm);
         await metricsCollector.recordStepDuration(data.event.id, 'save_suggestion');
 
         Logger.service(`[WORKER] Successfully suggested beatmap using ${algorithmResult.algorithm} algorithm${algorithmResult.relaxedCriteria ? ' with RELAXED criteria' : ''}`);
 
         await metricsCollector.updateCommandResult(data.event.id, 'success');
 
-        await redisStore.addSuggestion(selected.beatmap_id, data.user.id, selected.mods);
+        await redisStore.addSuggestion(selected.beatmap_id, data.user.id, selected.mods, algorithmResult.algorithm);
         await metricsCollector.recordStepDuration(data.event.id, 'add_suggestion_redis');
 
         process.send({
@@ -307,6 +326,7 @@ process.on('message', async (data) => {
     } finally {
         await redisStore.close();
         await metricsCollector.close();
+        await userPreferencesManager.close();
         process.removeAllListeners('message');
         try { await db.disconnect(); } catch { }
         if (global.gc) global.gc();

@@ -1,4 +1,4 @@
-function parseCommandParameters(message, gamemode) {
+function parseCommandParameters(message, gamemode, userPreferences = null) {
     const parts = message.trim().split(/\s+/);
     const rawArgs = parts.slice(1).join(' ');
     const input = rawArgs.toUpperCase();
@@ -11,6 +11,7 @@ function parseCommandParameters(message, gamemode) {
         DT: 'DT', DOUBLETIME: 'DT',
         NC: 'NC', NIGHTCORE: 'NC',
         EZ: 'EZ', EASY: 'EZ',
+        HT: 'HT', HALFTIME: 'HT',
         FL: 'FL', FLASHLIGHT: 'FL',
         SD: 'SD', SUDDENDEATH: 'SD',
         PF: 'PF', PERFECT: 'PF',
@@ -116,19 +117,60 @@ function parseCommandParameters(message, gamemode) {
     const hasNM = mods.has('NM');
     mods.delete('NM');
 
-    const allowOtherMods =
+    let allowOtherMods =
         hasPlus ||
         (mods.size === 0 && !hasNM && tokens.length === 0);
 
+    let finalMods = Array.from(mods);
+    let finalAllowOtherMods = allowOtherMods;
+    let finalBpm = bpm;
+    let finalPp = pp;
+    let finalAlgorithm = 'Base';
+
+    // Apply user preferences if not in auto mode AND no command parameters provided
+    if (userPreferences) {
+        if (!userPreferences.autoMods && mods.size === 0) {
+            finalMods = userPreferences.mods || [];
+            finalAllowOtherMods = userPreferences.allowAnyMods !== undefined ? userPreferences.allowAnyMods : true;
+        }
+
+        if (!userPreferences.autoAlgorithm) {
+            finalAlgorithm = userPreferences.algorithm || 'Base';
+        }
+
+        if (!userPreferences.autoPP && pp === null) {
+            finalPp = userPreferences.pp || pp;
+        }
+
+        if (!userPreferences.autoBPM && bpm === null) {
+            finalBpm = userPreferences.bpm || bpm;
+        }
+    }
+
+    // Rebuild parameters string with final values
+    let finalParameters = rawArgs.trim();
+    if (userPreferences && (
+        (!userPreferences.autoMods && mods.size === 0) ||
+        (!userPreferences.autoPP && pp === null) ||
+        (!userPreferences.autoBPM && bpm === null)
+    )) {
+        const paramParts = [];
+        if (finalMods.length > 0) paramParts.push(...finalMods);
+        if (finalPp) paramParts.push(`pp:${finalPp}`);
+        if (finalBpm) paramParts.push(`bpm:${finalBpm}`);
+        finalParameters = paramParts.join(' ');
+    }
+
     return {
-        allowOtherMods,
-        mods: Array.from(mods),
+        allowOtherMods: finalAllowOtherMods,
+        mods: finalMods,
         precis: precision !== null ? [precision] : [1, 2, 3, 4],
-        parameters: rawArgs.trim(),
-        bpm,
-        pp,
+        parameters: finalParameters,
+        bpm: finalBpm,
+        pp: finalPp,
         unsupportedMods,
-        unknownTokens
+        unknownTokens,
+        algorithm: finalAlgorithm
     };
 }
 

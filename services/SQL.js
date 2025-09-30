@@ -78,7 +78,7 @@ class Thread2Database {
         }
     }
 
-    async saveSuggestion(userId, beatmapId, eventId, ppTarget, mods) {
+    async saveSuggestion(userId, beatmapId, eventId, ppTarget, mods, algo) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();
 
@@ -91,7 +91,8 @@ class Thread2Database {
                 Date: new Date(),
                 pp_target: ppTarget,
                 mods: mods,
-                nv: true
+                nv: true,
+                algo: algo
             });
 
             const duration = Date.now() - startTime;

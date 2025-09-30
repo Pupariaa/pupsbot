@@ -209,6 +209,10 @@ class OsuApiClient {
                 throw new Error(response.data.error);
             }
 
+            // console.log('getUserBeatmapScore');
+            // console.log(response);
+            // console.log('---------------------');
+
             return response.data.data;
         } catch (error) {
             Logger.errorCatch('OsuApiClient', `getUserBeatmapScore failed for beatmap ${beatmapId}, user ${userId}: ${error.message}`);

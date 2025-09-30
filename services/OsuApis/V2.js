@@ -107,7 +107,6 @@ class OsuApiV2 {
         try {
             await performe.init();
             await metricsCollector.init();
-
             let cachedProfile = await performe.getCachedProfile(user);
             if (cachedProfile) {
                 const duration = Date.now() - startTime;
@@ -116,22 +115,27 @@ class OsuApiV2 {
                     id: cachedProfile.id,
                     username: cachedProfile.username,
                     statistics: { pp: cachedProfile.pp },
-                    country: { code: cachedProfile.locale }
+                    locale: cachedProfile.locale
                 };
             }
             const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
             const userData = await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
-
+            console.log(userData)
             const profileData = {
                 id: userData.id,
                 username: userData.username,
                 pp: userData.statistics?.pp || 0,
-                locale: userData.country?.code || 'XX'
+                locale: userData?.country_code || 'XX'
             };
 
             await performe.setCachedProfile(profileData.id, profileData);
             await performe.setCachedProfile(profileData.username, profileData);
-            return userData;
+
+            // Return the raw userData with proper locale structure for Manager.js
+            return {
+                ...userData,
+                locale: userData?.country_code || 'XX'
+            };
         } catch (error) {
             throw error;
         } finally {

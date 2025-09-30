@@ -412,7 +412,7 @@ class Performe {
                 id: profileData.id || profileData.user_id,
                 username: profileData.username,
                 pp: profileData.pp || profileData.statistics?.pp || 0,
-                locale: profileData.country_code || profileData.country || 'XX',
+                locale: profileData.locale || 'XX',
                 cached_at: Date.now()
             };
 

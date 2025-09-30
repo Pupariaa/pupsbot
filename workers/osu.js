@@ -4,7 +4,7 @@ const Thread2Database = require('../services/SQL');
 const MetricsCollector = require('../services/MetricsCollector');
 const Notifier = require('../services/Notifier');
 const OsuApiClient = require('../services/OsuApis/Client');
-const { SendBeatmapMessage, SendNotFoundBeatmapMessage } = require('../utils/messages');
+const { SendBeatmapMessage, SendNotFoundBeatmapMessage, SendErrorInternal } = require('../utils/messages');
 const { getUserErrorMessage } = require('../utils/UserFacingError');
 const parseCommandParameters = require('../utils/parser/commandParser');
 const computeCrossModeProgressionPotential = require('../compute/osu/CrossModeProgressionPotential');
@@ -21,14 +21,32 @@ const notifier = new Notifier();
 const algorithmManager = new AlgorithmManager();
 const userPreferencesManager = new UserPreferencesManager();
 
-let GlobalData;
+
+async function sendErrorResponse(data, errorCode, message) {
+    try {
+        const locale = data.user?.locale || 'FR';
+        const errorMsg = message || SendErrorInternal(locale, data.event.id);
+
+        process.send({
+            username: data.event.nick,
+            response: errorMsg,
+            id: data.event.id,
+            beatmapId: 0,
+            userId: data.user.id,
+            success: false,
+            errorCode: errorCode
+        });
+    } catch (sendError) {
+        Logger.errorCatch('OSU Worker → Send Error Response', sendError);
+    }
+}
 
 process.on('message', async (data) => {
     GlobalData = data;
 
-    // Check if rate limit is still valid
     if (!data.event.rateLimitValid) {
         Logger.service(`[WORKER] Rate limit invalid for user ${data.user.id}, aborting`);
+        await sendErrorResponse(data, 'ERR_RATE_LIMIT');
         return;
     }
 
@@ -246,10 +264,7 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'get_beatmap');
 
         if (!beatmap) {
-            const response = await SendNotFoundBeatmapMessage(user.locale);
-            process.send({ type: 'result', success: false, message: response.message, id: event.id });
-            await db.saveCommandHistory(data.event.id, data.event.message, response.message, data.user.id, data.event.nick, false, 0);
-            await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
+            await sendErrorResponse(data, 'ERR_BEATMAP_NOT_FOUND');
             return;
         }
 
@@ -290,8 +305,7 @@ process.on('message', async (data) => {
         }
 
         try {
-            const locale = data.user?.locale || 'FR';
-            const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
+            await sendErrorResponse(data, 'ERR_WORKER_CRASH');
 
             try {
                 await metricsCollector.updateCommandResult(data.event.id, 'worker_crash');
@@ -299,17 +313,9 @@ process.on('message', async (data) => {
                 Logger.errorCatch('OSU Worker → Metrics Error', metricsError);
             }
 
-            process.send({
-                username: data.event.nick,
-                response: msg,
-                id: data.event.id,
-                beatmapId: 0,
-                userId: data.user.id,
-                success: false,
-                errorCode: 'ERR_WORKER_CRASH'
-            });
-
             try {
+                const locale = data.user?.locale || 'FR';
+                const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
                 await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
             } catch (dbError) {
                 Logger.errorCatch('OSU Worker → DB Error', dbError);

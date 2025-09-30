@@ -10,6 +10,9 @@ module.exports = (sequelizeInstance) => {
         pp_earled: DataTypes.FLOAT,
         mods: DataTypes.INTEGER,
         nv: DataTypes.INTEGER,
+        algo: DataTypes.STRING,
+        score_id: DataTypes.BIGINT,
+        used_mods: DataTypes.INTEGER
     }, {
         tableName: 'suggested_beatmaps',
         timestamps: false

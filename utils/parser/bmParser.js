@@ -11,6 +11,7 @@ function parseCommandParameters(message, gamemode) {
         DT: 'DT', DOUBLETIME: 'DT',
         NC: 'NC', NIGHTCORE: 'NC',
         EZ: 'EZ', EASY: 'EZ',
+        HT: 'HT', HALFTIME: 'HT',
         FL: 'FL', FLASHLIGHT: 'FL',
         SD: 'SD', SUDDENDEATH: 'SD',
         PF: 'PF', PERFECT: 'PF',
@@ -37,7 +38,7 @@ function parseCommandParameters(message, gamemode) {
     const mode = (gamemode || 'osu').toLowerCase();
     const supportedMods = mode === 'mania'
         ? ['NF', 'EZ', 'HD', 'FL', 'DT', 'NC', 'FI', 'KEY1', 'KEY2', 'KEY3', 'KEY4', 'KEY5', 'KEY6', 'KEY7', 'KEY8', 'KEY9']
-        : ['HD', 'HR', 'DT', 'NC', 'EZ', 'NM'];
+        : ['HD', 'HR', 'DT', 'NC', 'EZ', 'NM', 'HT'];
 
     const mods = new Set();
     const unsupportedMods = [];

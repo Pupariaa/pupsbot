@@ -156,7 +156,7 @@ class Performe {
         }
     }
 
-    async addSuggestion(bmid, userId, mods, ttl = 604800) {
+    async addSuggestion(bmid, userId, mods, algo, ttl = 604800) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();
 
@@ -167,6 +167,7 @@ class Performe {
             await this._redis.sAdd(key, bmid);
             await this._redis.sAdd(key, mods ? mods : 0);
             await this._redis.sAdd(key, startTime.toString());
+            await this._redis.sAdd(key, algo);
             await this._redis.expire(key, ttl);
 
             const duration = Date.now() - startTime;
@@ -216,31 +217,32 @@ class Performe {
     }
 
     async recordBeatmap(beatmap) {
-        try {
-            await this._ensureReady();
-            const key = `beatmap:${beatmap.beatmap_id}`;
-            this._redis.hSet(key, {
-                beatmap_id: beatmap.beatmap_id ? beatmap.beatmap_id.toString() : beatmap.id.toString(),
-                beatmapset_id: beatmap.beatmapset_id.toString(),
-                title: beatmap.title ? beatmap.title.toString() : beatmap.beatmapset.title.toString(),
-                artist: beatmap.artist ? beatmap.artist.toString() : beatmap.beatmapset.artist.toString(),
-                creator: beatmap.creator ? beatmap.creator.toString() : beatmap.beatmapset.creator.toString(),
-                version: beatmap.version.toString(),
-                bpm: beatmap.bpm,
-                diff_size: beatmap.diff_size.toString(),
-                diff_overall: beatmap.diff_overall.toString(),
-                diff_approach: beatmap.diff_approach.toString(),
-                diff_drain: beatmap.diff_drain.toString(),
-                hit_length: beatmap.hit_length.toString(),
-                total_length: beatmap.total_length.toString(),
-                difficultyrating: beatmap.difficultyrating.toString(),
-                mode: beatmap.mode.toString()
-            });
+        //Todo Fix record beatmap 
+        // try {
+        //     await this._ensureReady();
+        //     const key = `beatmap:${beatmap.beatmap_id}`;
+        //     this._redis.hSet(key, {
+        //         beatmap_id: beatmap.beatmap_id ? beatmap.beatmap_id.toString() : beatmap.id.toString(),
+        //         beatmapset_id: beatmap.beatmapset_id.toString(),
+        //         title: beatmap.title ? beatmap.title.toString() : beatmap.beatmapset.title.toString(),
+        //         artist: beatmap.artist ? beatmap.artist.toString() : beatmap.beatmapset.artist.toString(),
+        //         creator: beatmap.creator ? beatmap.creator.toString() : beatmap.beatmapset.creator.toString(),
+        //         version: beatmap.version.toString(),
+        //         bpm: beatmap.bpm,
+        //         diff_size: beatmap.diff_size ? beatmap.diff_size.toString() : beatmap.cs.toString(),
+        //         diff_overall: beatmap.diff_overall ? beatmap.diff_overall.toString() : beatmap.od.toString(),
+        //         diff_approach: beatmap.diff_approach ? beatmap.diff_approach.toString() : beatmap.ar.toString(),
+        //         diff_drain: beatmap.diff_drain ? beatmap.diff_drain.toString() : beatmap.drain.toString(),
+        //         hit_length: beatmap.hit_length.toString(),
+        //         total_length: beatmap.total_length.toString(),
+        //         difficultyrating: beatmap.difficultyrating.toString() ? beatmap.difficultyrating.toString() : beatmap.difficulty_rating.toString(),
+        //         mode: beatmap.mode.toString()
+        //     });
 
-        } catch (error) {
-            console.log(error);
-            Logger.errorCatch('PERFORME.RECORD_BEATMAP', error);
-        }
+        // } catch (error) {
+        //     console.log(error);
+        //     Logger.errorCatch('PERFORME.RECORD_BEATMAP', error);
+        // }
     }
 
     async getBeatmap(id) {

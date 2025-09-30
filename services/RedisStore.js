@@ -246,6 +246,7 @@ class Performe {
     }
 
     async getBeatmap(id) {
+        if (!id || isNaN(id) || id === 0 || id === '0') return false;
         try {
             await this._ensureReady();
             const beatmap = await this._redis.hGetAll(`beatmap:${id}`);

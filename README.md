@@ -140,15 +140,96 @@ Join the official **Pupsbot** team.
 
 Get the current version of **Pupsbot**
 
-## Deprecated Commands
+---
 
-### `!bm`
+## Pupsbot Website
 
-Old command for the "osu" mode replaced by `!o` (osu) for more consistency
+Pupsbot offers a modern web interface that allows you to manage your preferences and customize your bot experience beyond the basic commands.
+
+### Access the Website
+
+Visit **[https://pb.pupsweb.cc/](https://pb.pupsweb.cc/)** to access the Pupsbot web interface.
+
+### What You Can Do
+
+#### **User Preferences Management**
+- **Mod Preferences**: Set your preferred mods (HD, HR, DT, NC, EZ) that will be automatically applied to suggestions
+- **Algorithm Selection**: Choose between Conservative, Balanced, Aggressive, Base, or Dynamic algorithms for PP calculation
+- **PP Range**: Set a specific PP target that will override automatic calculations
+- **BPM Preferences**: Configure preferred BPM ranges for beatmap suggestions
+- **Auto Mode Toggle**: Enable/disable automatic application of your stored preferences vs command parameters
+
+#### **Advanced Filtering**
+- **Mapper Ban List**: Block specific mappers from appearing in your suggestions
+- **Title Ban List**: Exclude beatmaps with certain keywords in their titles
+- **Mod Combination Control**: Choose whether to allow additional mods beyond your specified preferences
+
+#### **Dashboard Features**
+- **Suggestion History**: View your recent beatmap recommendations with detailed information
+- **Statistics Tracking**: Monitor your bot usage and suggestion patterns
+- **Real-time Status**: Check bot availability and connection status
+- **Profile Integration**: Secure OAuth2 login with your osu! account
+
+### Benefits of Using the Website
+
+1. **Persistent Settings**: Your preferences are saved permanently, so you don't need to specify them in every command
+2. **Advanced Control**: Access features not available through PM commands, like mapper/title bans
+3. **Visual Interface**: Easy-to-use forms and toggles instead of remembering command syntax
+4. **History Tracking**: Review your suggestion patterns and bot usage over time
+5. **Algorithm Fine-tuning**: Choose the exact PP calculation method that works best for your playstyle
+
+### How It Works
+
+When you use the website to set preferences, they are stored in the bot's database and automatically applied to your `!o` commands. You can still override these preferences by specifying parameters in your commands (e.g., `!o HD pp:200` will temporarily override your stored preferences).
+
+The website uses the same secure OAuth2 authentication as osu!, ensuring your account information remains protected while providing seamless integration with your osu! profile.
 
 ---
 
-## Technical Overview
+# Pupsbot Web Interface
+
+A modern web interface for the Pupsbot Discord bot, providing users with a comprehensive dashboard to view their beatmap suggestions, track statistics, and manage preferences.
+
+## Features
+
+### Core Functionality
+- **Beatmap Suggestions Dashboard**: View your most recent beatmap suggestions with detailed information
+- **Statistics Overview**: Track bot usage, user engagement, and performance metrics
+- **User Profile Management**: Manage your preferences, view suggestion history, and customize settings
+- **OAuth2 Authentication**: Secure login with osu! account integration
+- **Real-time Data**: Live updates from the bot's database and cache systems
+
+### User Interface
+- **Modern Dark Theme**: Sleek, responsive design with Japanese/otaku aesthetics
+- **Responsive Layout**: Optimized for desktop and mobile devices
+- **Interactive Components**: Smooth animations and intuitive user experience
+- **Status Indicators**: Real-time bot status and connection monitoring
+
+## Pupsweb Tech Stack
+
+### Frontend
+- **Next.js 15.6.0** - React framework with App Router
+- **React 19.1.0** - UI library with latest features
+- **Tailwind CSS 4** - Utility-first CSS framework
+- **Radix UI** - Accessible component primitives
+- **Lucide React** - Modern icon library
+
+### Backend
+- **Node.js** - JavaScript runtime
+- **Next.js API Routes** - Serverless API endpoints
+- **Custom Server** - Express-like server for advanced functionality
+
+### Database & Caching
+- **MySQL 2** - Primary database for user data and suggestions
+- **Redis** - Caching layer for performance optimization
+- **Connection Pooling** - Efficient database connection management
+
+### Authentication
+- **OAuth2** - osu! API integration for user authentication
+- **Session Management** - Secure client-side session handling
+- **Cookie-based Auth** - Server-side session verification
+
+## Pupsbot Technical Stack
 
 - **API:** Uses osu! API v2 with Redis caching and rate limiting
 - **IRC:** Powered by `irc-framework` to listen and respond to private messages
@@ -161,6 +242,77 @@ Old command for the "osu" mode replaced by `!o` (osu) for more consistency
 - **Logging:** Enhanced logging with rotation, colored output, and error tracking
 
 ---
+
+# Algorithms
+
+This folder contains different algorithms to compute PP (Performance Points) ranges for osu! players. Each algorithm uses a different mathematical approach based on available top scores and progression data.
+
+## Available Algorithms
+
+### Base (Default)
+**Mathematical Approach:** Logarithmic scaling with recent performance analysis
+- **Base Range:** `max(60, min(600, log10(userPP + 1) * 45))`
+- **Recent Analysis:** 30-day window
+- **Expected Performance:** `userPP * 0.06`
+- **Adjustment Logic:**
+  - If recent/expected > 1.05: +55% of base range
+  - If recent/expected < 0.95: -35% of base range
+- **Progression Factor:** ±30% of base range based on global_score
+- **Best for:** Players with consistent recent activity
+
+### Conservative
+**Mathematical Approach:** Quartile-based statistical analysis
+- **Base Range:** `max(40, min(300, userPP * 0.2 + IQR * 0.5))`
+- **Statistical Method:** Uses Q1, Q3, and IQR (Interquartile Range)
+- **Adjustment:** ±20% of base range based on progression
+- **Range Size:** 25% of user PP (smallest ranges)
+- **Best for:** Stable predictions, risk-averse calculations
+
+### Aggressive
+**Mathematical Approach:** Top performance momentum analysis
+- **Base Range:** `max(80, min(600, userPP * 0.4))`
+- **Focus:** Top 3 scores and 30-day momentum
+- **Momentum Logic:**
+  - If recent/top3 > 1.2: +60% of base range
+  - If recent/top3 < 0.8: -50% of base range
+- **Range Size:** 40% of user PP (largest ranges)
+- **Best for:** Detecting high potential gains, active players
+
+### Balanced
+**Mathematical Approach:** Top 10 analysis with improvement tracking
+- **Base Range:** `max(60, min(450, userPP * 0.3))`
+- **Analysis Window:** Top 10 scores, 45-day recent window
+- **Improvement Rate:** `(recent_avg - top10_avg) / top10_avg`
+- **Adjustment Logic:**
+  - If improvement > 10%: +30% of base range
+  - If improvement < -10%: -25% of base range
+- **Range Size:** 30% of user PP
+- **Best for:** General use, balanced risk/reward
+
+### Dynamic
+**Mathematical Approach:** Volatility-adaptive statistical model
+- **Base Range:** `max(70, min(500, userPP * (0.25 + volatility * 0.3)))`
+- **Volatility Factor:** `min(1.0, recent_std_dev / median)`
+- **Trend Analysis:** 60-day window with median comparison
+- **Adaptive Scaling:** Range adjusts based on player consistency
+- **Adjustment:** ±60% of base range based on trend factor
+- **Best for:** Highly variable players, adaptive predictions
+
+## Mathematical Formulas
+
+### Common Variables
+- `userPP`: Current player PP
+- `topScores`: Array of player's top scores
+- `progressionData`: Cross-mode progression analysis data
+- `global_score`: Overall progression score (0-100)
+
+## Algorithm Selection Guide
+
+- **Conservative**: Small, stable ranges for consistent players
+- **Aggressive**: Large ranges for high-potential scenarios  
+- **Balanced**: General-purpose balanced approach
+- **Dynamic**: Adaptive ranges based on player volatility
+- **Base**: Original algorithm with logarithmic scaling
 
 ### System informations
 - Based on Dockerised services on Unraid OS
@@ -237,7 +389,7 @@ pupsbot/
 ## Limitations
 
 - Only supports ranked maps
-- No replay parsing or v2 features
+- No replay parsing
 - Requires enough historical data from your profile and from others to be accurate
 
 ## Maintainer

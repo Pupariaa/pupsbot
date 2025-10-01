@@ -21,16 +21,20 @@ module.exports = {
             }
             const u = user;
             const responseMessage = u.locale === 'FR'
-                ? `-- v2.2.0 Nouvelle mise à jour Pupsbot ! --
-            - Sécurité renforcée & logs améliorés
-            - Nouveau système de monitoring (Metrics & Health)
-            - Intégration complète osu! API V2
-            - Dashboard dispo: remote.pupsweb.cc`
-                : `-- v2.2.0 New Pupsbot Update! --
-            - Enhanced security & improved logging
-            - New monitoring system (Metrics & Health)
-            - Full osu! API V2 integration
-            - Dashboard: remote.pupsweb.cc`;
+                ? `-- v2.3.0 Nouvelle mise à jour Pupsbot ! --
+            - Renforcement du userRateLimit
+            - Implémentation des préférences persistantes
+            - 4 nouveaux algorithmes de calcul de PP
+            - Fix des bugs et améliorations
+            - Dashboard de suivi des suggestions et modifications des préférences [https://remote.pupsweb.cc -> Lien]
+                `
+                : `-- v2.3.0 New Pupsbot Update! --
+            - UserRateLimit enforcement
+            - Persistent preferences implementation
+            - 4 new PP calculation algorithms
+            - Bug fixes and improvements
+            - Dashboard for tracking suggestions and modifying preferences [https://remote.pupsweb.cc -> Link]
+                `;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);

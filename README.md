@@ -186,25 +186,6 @@ The website uses the same secure OAuth2 authentication as osu!, ensuring your ac
 
 ---
 
-# Pupsbot Web Interface
-
-A modern web interface for the Pupsbot Discord bot, providing users with a comprehensive dashboard to view their beatmap suggestions, track statistics, and manage preferences.
-
-## Features
-
-### Core Functionality
-- **Beatmap Suggestions Dashboard**: View your most recent beatmap suggestions with detailed information
-- **Statistics Overview**: Track bot usage, user engagement, and performance metrics
-- **User Profile Management**: Manage your preferences, view suggestion history, and customize settings
-- **OAuth2 Authentication**: Secure login with osu! account integration
-- **Real-time Data**: Live updates from the bot's database and cache systems
-
-### User Interface
-- **Modern Dark Theme**: Sleek, responsive design with Japanese/otaku aesthetics
-- **Responsive Layout**: Optimized for desktop and mobile devices
-- **Interactive Components**: Smooth animations and intuitive user experience
-- **Status Indicators**: Real-time bot status and connection monitoring
-
 ## Pupsweb Tech Stack
 
 ### Frontend

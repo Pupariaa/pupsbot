@@ -16,8 +16,8 @@ const OsuApiInternalServer = require('./services/OsuApis/InternalServer');
 const OsuApiClient = require('./services/OsuApis/Client');
 const UserRateLimiter = require('./services/UserRateLimiter');
 const notifier = new Notifier();
-const osu_utils = require('osu-utils');
-const osuUtils = new osu_utils();
+const OsuUtils = require('osu-utils');
+const osuUtils = new OsuUtils();
 
 let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, userRateLimiter;
 global.temp = [];
@@ -85,7 +85,8 @@ global.userRequest = [];
                     const windowStart = suggestionStart - 20 * 60 * 1000;
                     const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
                     if (scoreDate >= windowStart && scoreDate <= windowEnd) {
-                        await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToBitwise(played.mods.join(',')));
+                        console.log(played.mods);
+                        await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
                     } else {
                         if (retries < 1) {

@@ -26,14 +26,14 @@ module.exports = {
             - Implémentation des préférences persistantes
             - 4 nouveaux algorithmes de calcul de PP
             - Fix des bugs et améliorations
-            - Dashboard de suivi des suggestions et modifications des préférences [https://remote.pupsweb.cc -> Lien]
+            - Dashboard de suivi des suggestions et modifications des préférences [https://pb.pupsweb.cc -> Lien]
                 `
                 : `-- v2.3.0 New Pupsbot Update! --
             - UserRateLimit enforcement
             - Persistent preferences implementation
             - 4 new PP calculation algorithms
             - Bug fixes and improvements
-            - Dashboard for tracking suggestions and modifying preferences [https://remote.pupsweb.cc -> Link]
+            - Dashboard for tracking suggestions and modifying preferences [https://pb.pupsweb.cc -> Link]
                 `;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);

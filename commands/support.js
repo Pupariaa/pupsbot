@@ -21,8 +21,8 @@ module.exports = {
             }
             const u = user;
             const responseMessage = u.locale === 'FR'
-                ? `Pour soutenir le projet, voici [https://ko-fi.com/bellafiora le lien kofi] :) Merci ♥`
-                : `To support the project, here is [https://ko-fi.com/bellafiora the kofi link] :) Thanks-u ♥`;
+                ? `Pour soutenir le projet, voici [https://ko-fi.com/pupsbot le lien kofi] :) Merci ♥`
+                : `To support the project, here is [https://ko-fi.com/pupsbot the kofi link] :) Thanks-u ♥`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);

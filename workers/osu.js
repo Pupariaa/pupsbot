@@ -12,7 +12,7 @@ const computeTargetPP = require('../compute/osu/targetPP');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
-const { filterOutTop100, filterByMods, pickBestRandomPrecision } = require('../utils/osu/ScoreFilters');
+const { filterOutTop100, filterByMods, pickClosestToTargetPP } = require('../utils/osu/ScoreFilters');
 const AlgorithmManager = require('../managers/AlgorithmManager');
 const UserPreferencesManager = require('../managers/UserPreferencesManager');
 
@@ -33,7 +33,7 @@ async function sendErrorResponse(data, errorCode, message) {
             id: data.event.id,
             beatmapId: 0,
             userId: data.user.id,
-            success: false,
+            success: true,
             errorCode: errorCode
         });
     } catch (sendError) {
@@ -172,49 +172,65 @@ process.on('message', async (data) => {
         }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
-        const sortList = [];
+        const buildSortList = async (ppMargin) => {
+            const list = [];
+            for (const score of filtered) {
+                const mapId = parseInt(score.beatmap_id);
+                if (suggestions.includes(mapId.toString())) continue;
 
-        for (const score of filtered) {
-            const mapId = parseInt(score.beatmap_id);
-            if (suggestions.includes(mapId.toString())) continue;
+                const beatmap = await redisStore.getBeatmap(mapId);
+                if (beatmap) {
+                    const mapper = beatmap.creator?.toLowerCase() || '';
+                    const title = beatmap.title?.toLowerCase() || '';
 
-            const beatmap = await redisStore.getBeatmap(mapId);
-            if (beatmap) {
-                const mapper = beatmap.creator?.toLowerCase() || '';
-                const title = beatmap.title?.toLowerCase() || '';
+                    if (userPreferences.mapperBan && userPreferences.mapperBan.length > 0 &&
+                        userPreferences.mapperBan.some(bannedMapper =>
+                            mapper.includes(bannedMapper.toLowerCase())
+                        )) {
+                        continue;
+                    }
 
-                if (userPreferences.mapperBan && userPreferences.mapperBan.length > 0 &&
-                    userPreferences.mapperBan.some(bannedMapper =>
-                        mapper.includes(bannedMapper.toLowerCase())
-                    )) {
-                    continue;
+                    if (userPreferences.titleBan && userPreferences.titleBan.length > 0 &&
+                        userPreferences.titleBan.some(bannedTitle =>
+                            title.includes(bannedTitle.toLowerCase())
+                        )) {
+                        continue;
+                    }
                 }
 
-                if (userPreferences.titleBan && userPreferences.titleBan.length > 0 &&
-                    userPreferences.titleBan.some(bannedTitle =>
-                        title.includes(bannedTitle.toLowerCase())
-                    )) {
-                    continue;
-                }
-            }
+                const scorePP = parseFloat(score.pp);
+                let shouldInclude = false;
 
-            const scorePP = parseFloat(score.pp);
-            let shouldInclude = false;
-
-            if (params.pp !== null) {
-                const ppMargin = algorithmResult.relaxedCriteria ? 25 : 15;
-                shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
-            } else {
-                if (algorithmResult.relaxedCriteria) {
-                    shouldInclude = true;
+                if (params.pp !== null) {
+                    shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
                 } else {
-                    shouldInclude = !params.pp || (scorePP >= params.pp && scorePP <= params.pp + 28);
+                    if (algorithmResult.relaxedCriteria) {
+                        shouldInclude = true;
+                    } else {
+                        shouldInclude = scorePP >= targetPP && scorePP <= targetPP + 28;
+                    }
+                }
+
+                if (shouldInclude) {
+                    list.push(score);
                 }
             }
+            return list;
+        };
 
-            if (shouldInclude) {
-                sortList.push(score);
+        let sortList = [];
+
+        if (params.pp !== null) {
+            const margins = [0, 5, 10, 15, 20, 25];
+            for (const margin of margins) {
+                sortList = await buildSortList(margin);
+                if (sortList.length > 0) {
+                    Logger.service(`[WORKER] Found ${sortList.length} maps with PP margin ±${margin}`);
+                    break;
+                }
             }
+        } else {
+            sortList = await buildSortList(0);
         }
 
         if (sortList.length === 0) {
@@ -234,8 +250,9 @@ process.on('message', async (data) => {
             return;
         }
 
-        const selected = pickBestRandomPrecision(sortList);
-        await metricsCollector.recordStepDuration(data.event.id, 'pick_best_random_precision');
+        const ppTarget = params.pp !== null ? params.pp : targetPP;
+        const selected = pickClosestToTargetPP(sortList, ppTarget);
+        await metricsCollector.recordStepDuration(data.event.id, 'pick_closest_to_target_pp');
 
         if (!selected) {
             const msg = await SendNotFoundBeatmapMessage(data.user.locale);

@@ -48,8 +48,19 @@ function pickBestRandomPrecision(filtered) {
     return null;
 }
 
+function pickClosestToTargetPP(filtered, targetPP) {
+    if (!filtered || filtered.length === 0) return null;
+
+    return filtered.reduce((closest, current) => {
+        const currentDiff = Math.abs(parseFloat(current.pp) - targetPP);
+        const closestDiff = Math.abs(parseFloat(closest.pp) - targetPP);
+        return currentDiff < closestDiff ? current : closest;
+    });
+}
+
 module.exports = {
     filterOutTop100,
     filterByMods,
-    pickBestRandomPrecision
+    pickBestRandomPrecision,
+    pickClosestToTargetPP
 };

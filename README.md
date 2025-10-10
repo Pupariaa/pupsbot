@@ -92,7 +92,7 @@ Pupsbot supports additional filtering parameters to fine-tune your recommendatio
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `pp:XXX` | Filter maps that give approximately XXX pp (±15 pp tolerance) | `!o HD pp:200` |
+| `pp:XXX` | Filter maps that give approximately XXX pp (progressive tolerance: starts exact, expands up to ±25 pp if needed) | `!o HD pp:200` |
 | `bpm:XXX` | Filter maps with approximately XXX BPM (±10 BPM tolerance) | `!o DT bpm:180` |
 
 </div>

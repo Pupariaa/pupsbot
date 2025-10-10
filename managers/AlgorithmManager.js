@@ -10,7 +10,7 @@ const { filterByMods, filterOutTop100 } = require('../utils/osu/ScoreFilters');
 
 class AlgorithmManager {
     constructor() {
-        this.algorithms = ['Conservative', 'Balanced', 'Aggressive', 'Base', 'Dynamic'];
+        this.algorithms = ['Balanced', 'Base', 'Dynamic', 'Aggressive', 'Conservative'];
     }
 
     /**
@@ -32,8 +32,7 @@ class AlgorithmManager {
             algorithm
         } = params;
 
-        // If specific algorithm is requested, use only that one
-        if (algorithm && algorithm !== 'Base') {
+        if (algorithm) {
             Logger.service(`[ALGORITHM] Using specific algorithm: ${algorithm}`);
             return await this._trySpecificAlgorithm({
                 userPP,

@@ -85,7 +85,6 @@ global.userRequest = [];
                     const windowStart = suggestionStart - 20 * 60 * 1000;
                     const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
                     if (scoreDate >= windowStart && scoreDate <= windowEnd) {
-                        console.log(played.mods);
                         await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
                     } else {

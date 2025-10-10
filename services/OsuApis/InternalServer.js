@@ -300,7 +300,6 @@ class OsuApiInternalServer {
         this.app.get('/rate-limiter/stats', async (req, res) => {
             try {
                 const stats = this.apiManager.rateLimiter.getStats();
-                console.log(stats);
                 res.json({
                     success: true,
                     data: stats

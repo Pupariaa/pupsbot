@@ -10,3 +10,4 @@ logs/application.log
 /exports
 MONITORING_README.md
 /logs
+CHANGELOG*.md

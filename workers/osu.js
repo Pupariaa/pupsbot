@@ -225,7 +225,6 @@ process.on('message', async (data) => {
             for (const margin of margins) {
                 sortList = await buildSortList(margin);
                 if (sortList.length > 0) {
-                    Logger.service(`[WORKER] Found ${sortList.length} maps with PP margin ±${margin}`);
                     break;
                 }
             }
@@ -290,8 +289,6 @@ process.on('message', async (data) => {
         await redisStore.trackSuggestedBeatmap(selected.beatmap_id, data.user.id, beatmap.total_length, data.event.id);
         await db.saveSuggestion(data.user.id, selected.beatmap_id, data.event.id, targetPP, selected.mods, algorithmResult.algorithm);
         await metricsCollector.recordStepDuration(data.event.id, 'save_suggestion');
-
-        Logger.service(`[WORKER] Successfully suggested beatmap using ${algorithmResult.algorithm} algorithm${algorithmResult.relaxedCriteria ? ' with RELAXED criteria' : ''}`);
 
         await metricsCollector.updateCommandResult(data.event.id, 'success');
 

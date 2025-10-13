@@ -213,7 +213,23 @@ class OsuApiManager {
 
         try {
             const cacheKey = `beatmap:${beatmapId}`;
-            let cachedBeatmap = await this.redis.get(cacheKey);
+            let cachedBeatmap = null;
+
+            try {
+                cachedBeatmap = await this.redis.get(cacheKey);
+            } catch (redisError) {
+                if (redisError.message.includes('WRONGTYPE')) {
+                    Logger.service(`Redis WRONGTYPE error for beatmap ${beatmapId}, cleaning up and fetching from API`);
+                    try {
+                        await this.redis._redis.del(cacheKey);
+                    } catch (delError) {
+                        Logger.errorCatch('OsuApiManager', `Failed to delete corrupted Redis key ${cacheKey}: ${delError.message}`);
+                    }
+                } else {
+                    Logger.errorCatch('OsuApiManager', `Redis error for beatmap ${beatmapId}: ${redisError.message}`);
+                }
+            }
+
             if (cachedBeatmap) {
                 const duration = Date.now() - startTime;
                 await this.metrics.recordServicePerformance('api', 'getBeatmap', duration, 'redis');
@@ -223,7 +239,13 @@ class OsuApiManager {
                 return await this.v2.getBeatmap(beatmapId);
             });
             source = 'v2';
-            await this.redis.setex(cacheKey, 3600, JSON.stringify(beatmap));
+
+            // Cache the result
+            try {
+                await this.redis.setex(cacheKey, 3600, JSON.stringify(beatmap));
+            } catch (cacheError) {
+                Logger.errorCatch('OsuApiManager', `Failed to cache beatmap ${beatmapId}: ${cacheError.message}`);
+            }
 
             const duration = Date.now() - startTime;
             await this.metrics.recordServicePerformance('api', 'getBeatmap', duration, 'v2');

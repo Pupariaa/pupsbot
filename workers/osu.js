@@ -254,7 +254,7 @@ process.on('message', async (data) => {
             Logger.service(`[WORKER] Using standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
         }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
-        
+
         filtered = filterOutTop100(filtered, top100Osu.table);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
@@ -263,8 +263,10 @@ process.on('message', async (data) => {
         if (filtered.length < 10 && params.modHierarchy) {
             Logger.service(`[WORKER] Only ${filtered.length} results after filtering for user ${data.user.id}, trying progressive fallback`);
             
-            // Try with no mods first
-            const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
+            // The scores are already categorized by preference, so we can use them progressively
+            // Try to get more scores by being less restrictive
+            const allScores = algorithmResult.results;
+            const noModsFiltered = filterByMods(allScores, [], params.allowOtherMods);
             const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
             Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
             
@@ -273,7 +275,7 @@ process.on('message', async (data) => {
                 Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
             } else if (filtered.length === 0) {
                 // If still nothing, try with any mods (allowOtherMods = true)
-                const anyModsFiltered = filterByMods(algorithmResult.results, params.mods, true);
+                const anyModsFiltered = filterByMods(allScores, params.mods, true);
                 filtered = filterOutTop100(anyModsFiltered, top100Osu.table);
                 Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
             }

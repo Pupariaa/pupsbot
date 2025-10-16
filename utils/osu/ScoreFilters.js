@@ -22,53 +22,34 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
         return filterByMods(results, requiredModsArray, isAllowOtherMods);
     }
 
-    const requiredMods = modsToBitwise(requiredModsArray);
-    const neutralModsMask = 32 | 16384;
-
-    // Return ALL scores in PP range, categorized by preference
+    // Return ALL scores, just categorized by preference - NO RESTRICTION
     const prioritized = [];
     const fallback = [];
     const other = [];
 
     for (const score of results) {
         const scoreMods = parseInt(score.mods, 10);
-        const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
-        const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
-
+        const scoreModsArray = bitwiseToMods(scoreMods);
+        
         // Check if it's an avoided mod
-        const scoreModsArray = bitwiseToMods(scoreModsWithoutNeutral);
         const hasAvoidedMod = modHierarchy.avoidMods.some(avoidMod => 
             scoreModsArray.includes(avoidMod)
         );
 
-        // Much more permissive logic - prioritize based on mod hierarchy, not strict matching
-        let isPreferred = false;
-        let isFallback = false;
-
-        if (requiredWithoutNeutral === 0) {
-            // Looking for no mods
-            isPreferred = scoreModsWithoutNeutral === 0;
-            isFallback = scoreModsWithoutNeutral !== 0 && !hasAvoidedMod;
+        // Simple categorization - no filtering, just ordering
+        if (hasAvoidedMod) {
+            other.push(score); // Avoided mods go last
         } else {
-            // Looking for specific mods - be more permissive
-            if (isAllowOtherMods) {
-                // If allowOtherMods, any score with the required mods is preferred
-                isPreferred = (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
-                isFallback = !isPreferred && !hasAvoidedMod;
+            // Check if it matches the primary mods
+            const requiredModsArray = modHierarchy.primaryMods || [];
+            const scoreModsKey = scoreModsArray.sort().join(',');
+            const primaryModsKey = requiredModsArray.sort().join(',');
+            
+            if (scoreModsKey === primaryModsKey) {
+                prioritized.push(score);
             } else {
-                // Exact match is preferred, but also allow partial matches as fallback
-                isPreferred = scoreModsWithoutNeutral === requiredWithoutNeutral;
-                isFallback = (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral && !isPreferred;
+                fallback.push(score);
             }
-        }
-
-        if (isPreferred) {
-            prioritized.push(score);
-        } else if (isFallback) {
-            fallback.push(score);
-        } else if (!hasAvoidedMod) {
-            // Include non-avoided mods as other options
-            other.push(score);
         }
     }
 

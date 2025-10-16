@@ -24,9 +24,8 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
 
     const requiredMods = modsToBitwise(requiredModsArray);
     const neutralModsMask = 32 | 16384;
-    const avoidMods = modsToBitwise(modHierarchy.avoidMods);
 
-    // First pass: prioritize by hierarchy, but don't exclude everything
+    // Return ALL scores in PP range, categorized by preference
     const prioritized = [];
     const fallback = [];
     const other = [];
@@ -36,7 +35,7 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
         const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
         const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
 
-        // Check if it's an avoided mod (but don't exclude completely)
+        // Check if it's an avoided mod
         const scoreModsArray = bitwiseToMods(scoreModsWithoutNeutral);
         const hasAvoidedMod = modHierarchy.avoidMods.some(avoidMod => 
             scoreModsArray.includes(avoidMod)
@@ -55,7 +54,7 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
         if (isPreferred) {
             prioritized.push(score);
         } else if (hasAvoidedMod) {
-            // Put avoided mods at the end, but don't exclude them completely
+            // Put avoided mods at the end
             other.push(score);
         } else {
             // Check if it's a fallback option
@@ -71,7 +70,7 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
         }
     }
 
-    // Return prioritized first, then fallback, then others (including avoided mods as last resort)
+    // Return ALL scores categorized by preference (no exclusion)
     return [...prioritized, ...fallback, ...other];
 }
 

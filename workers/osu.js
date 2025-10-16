@@ -246,9 +246,9 @@ process.on('message', async (data) => {
         let filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
         
-        // If no results with hierarchy, fallback to broader search
+        // Progressive fallback: start with preferred mods, then expand if needed
         if (filtered.length === 0 && params.modHierarchy) {
-            Logger.service(`[WORKER] No results with mod hierarchy for user ${data.user.id}, falling back to broader search`);
+            Logger.service(`[WORKER] No results with preferred mods for user ${data.user.id}, trying progressive fallback`);
             
             // Try with no mods first
             filtered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
@@ -267,15 +267,16 @@ process.on('message', async (data) => {
         }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
-        const buildSortList = async (ppMargin) => {
+        const buildSortListWithProgressiveFallback = async (ppMargin) => {
             const list = [];
-            const chunkSize = 10; // Process in chunks of 10 to avoid overwhelming Redis
-
-            // Process scores in chunks for better performance
-            for (let i = 0; i < filtered.length; i += chunkSize) {
+            const chunkSize = 10;
+            
+            // Process scores in chunks, but limit to first 50 for performance
+            const maxScores = Math.min(filtered.length, 50);
+            
+            for (let i = 0; i < maxScores; i += chunkSize) {
                 const chunk = filtered.slice(i, i + chunkSize);
-
-                // Process chunk in parallel
+                
                 const chunkResults = await Promise.all(
                     chunk.map(async (score) => {
                         const mapId = parseInt(score.beatmap_id);
@@ -323,12 +324,14 @@ process.on('message', async (data) => {
                     })
                 );
 
-                // Add valid results to list
                 chunkResults.forEach(result => {
                     if (result) list.push(result);
                 });
+                
+                // If we have enough results, stop processing
+                if (list.length >= 10) break;
             }
-
+            
             return list;
         };
 
@@ -337,13 +340,13 @@ process.on('message', async (data) => {
         if (params.pp !== null) {
             const margins = [0, 5, 10, 15, 20, 25];
             for (const margin of margins) {
-                sortList = await buildSortList(margin);
+                sortList = await buildSortListWithProgressiveFallback(margin);
                 if (sortList.length > 0) {
                     break;
                 }
             }
         } else {
-            sortList = await buildSortList(0);
+            sortList = await buildSortListWithProgressiveFallback(0);
         }
 
         if (sortList.length === 0) {

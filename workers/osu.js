@@ -243,31 +243,35 @@ process.on('message', async (data) => {
             });
         }
 
+        Logger.service(`[WORKER] Starting with ${algorithmResult.results.length} total scores for user ${data.user.id}`);
+        
         let filtered;
         if (params.modHierarchy) {
             // Use hierarchy only if no specific mods were requested
             filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
-            Logger.service(`[WORKER] Using mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
+            Logger.service(`[WORKER] After mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
         } else {
             // Use standard filtering when user specified mods
             filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
-            Logger.service(`[WORKER] Using standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
+            Logger.service(`[WORKER] After standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
         }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
-
+        
+        Logger.service(`[WORKER] Before filterOutTop100: ${filtered.length} scores`);
         filtered = filterOutTop100(filtered, top100Osu.table);
+        Logger.service(`[WORKER] After filterOutTop100: ${filtered.length} scores`);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
         // Progressive fallback: start with preferred mods, then expand if needed
         // Only do fallback if user didn't specify mods (params.modHierarchy exists)
         if (filtered.length < 10 && params.modHierarchy) {
             Logger.service(`[WORKER] Only ${filtered.length} results after filtering for user ${data.user.id}, trying progressive fallback`);
-            
+
             // Try with primary mods first
             const primaryModsFiltered = filterByMods(algorithmResult.results, params.modHierarchy.primaryMods, params.allowOtherMods);
             const primaryModsFilteredOut = filterOutTop100(primaryModsFiltered, top100Osu.table);
             Logger.service(`[WORKER] After primary mods fallback: ${primaryModsFilteredOut.length} scores`);
-            
+
             if (primaryModsFilteredOut.length > filtered.length) {
                 filtered = primaryModsFilteredOut;
                 Logger.service(`[WORKER] Using primary mods fallback (${filtered.length} scores)`);
@@ -276,7 +280,7 @@ process.on('message', async (data) => {
                 const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
                 const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
                 Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
-                
+
                 if (noModsFilteredOut.length > filtered.length) {
                     filtered = noModsFilteredOut;
                     Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
@@ -294,6 +298,7 @@ process.on('message', async (data) => {
         } else {
             filtered = filtered.filter(score => score.precision < 8).sort((a, b) => b.precision - a.precision);
         }
+        Logger.service(`[WORKER] After precision filtering: ${filtered.length} scores`);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_scores');
 
         const buildSortListWithProgressiveFallback = async (ppMargin) => {

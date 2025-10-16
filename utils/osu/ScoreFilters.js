@@ -41,32 +41,34 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
             scoreModsArray.includes(avoidMod)
         );
 
+        // Much more permissive logic - prioritize based on mod hierarchy, not strict matching
         let isPreferred = false;
+        let isFallback = false;
 
-        if (requiredWithoutNeutral === 0 && !isAllowOtherMods) {
+        if (requiredWithoutNeutral === 0) {
+            // Looking for no mods
             isPreferred = scoreModsWithoutNeutral === 0;
-        } else if (isAllowOtherMods) {
-            isPreferred = (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
+            isFallback = scoreModsWithoutNeutral !== 0 && !hasAvoidedMod;
         } else {
-            isPreferred = scoreModsWithoutNeutral === requiredWithoutNeutral;
+            // Looking for specific mods - be more permissive
+            if (isAllowOtherMods) {
+                // If allowOtherMods, any score with the required mods is preferred
+                isPreferred = (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
+                isFallback = !isPreferred && !hasAvoidedMod;
+            } else {
+                // Exact match is preferred, but also allow partial matches as fallback
+                isPreferred = scoreModsWithoutNeutral === requiredWithoutNeutral;
+                isFallback = (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral && !isPreferred;
+            }
         }
 
         if (isPreferred) {
             prioritized.push(score);
-        } else if (hasAvoidedMod) {
-            // Put avoided mods at the end
+        } else if (isFallback) {
+            fallback.push(score);
+        } else if (!hasAvoidedMod) {
+            // Include non-avoided mods as other options
             other.push(score);
-        } else {
-            // Check if it's a fallback option
-            const isFallbackMod = modHierarchy.fallbackMods.some(fallbackMods => 
-                arraysEqual(scoreModsArray.sort(), fallbackMods.sort())
-            );
-            
-            if (isFallbackMod) {
-                fallback.push(score);
-            } else {
-                other.push(score);
-            }
         }
     }
 

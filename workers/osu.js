@@ -22,8 +22,8 @@ const algorithmManager = new AlgorithmManager();
 const userPreferencesManager = new UserPreferencesManager();
 
 function createModHierarchy(userModsAnalysis) {
-    const avoidThreshold = 5; // Avoid mods used less than 5%
-    const dominantThreshold = 20; // Consider dominant if used more than 20%
+    const avoidThreshold = 2; // Avoid mods used less than 2% (was 5%)
+    const dominantThreshold = 15; // Consider dominant if used more than 15% (was 20%)
 
     const avoidMods = [];
     const dominantMods = [];
@@ -246,15 +246,20 @@ process.on('message', async (data) => {
         let filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
         
+        Logger.service(`[WORKER] After mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
+        
         // Progressive fallback: start with preferred mods, then expand if needed
         if (filtered.length === 0 && params.modHierarchy) {
             Logger.service(`[WORKER] No results with preferred mods for user ${data.user.id}, trying progressive fallback`);
             
             // Try with no mods first
             filtered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
+            Logger.service(`[WORKER] After no mods fallback: ${filtered.length} scores`);
+            
             if (filtered.length === 0) {
                 // If still nothing, try with any mods (allowOtherMods = true)
                 filtered = filterByMods(algorithmResult.results, params.mods, true);
+                Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
             }
         }
         filtered = filterOutTop100(filtered, top100Osu.table);
@@ -270,13 +275,13 @@ process.on('message', async (data) => {
         const buildSortListWithProgressiveFallback = async (ppMargin) => {
             const list = [];
             const chunkSize = 10;
-            
-            // Process scores in chunks, but limit to first 50 for performance
-            const maxScores = Math.min(filtered.length, 50);
-            
+
+            // Process scores in chunks for better performance
+            const maxScores = filtered.length;
+
             for (let i = 0; i < maxScores; i += chunkSize) {
                 const chunk = filtered.slice(i, i + chunkSize);
-                
+
                 const chunkResults = await Promise.all(
                     chunk.map(async (score) => {
                         const mapId = parseInt(score.beatmap_id);
@@ -328,10 +333,9 @@ process.on('message', async (data) => {
                     if (result) list.push(result);
                 });
                 
-                // If we have enough results, stop processing
-                if (list.length >= 10) break;
+                // Continue processing all scores, don't stop early
             }
-            
+
             return list;
         };
 

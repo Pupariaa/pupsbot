@@ -263,21 +263,29 @@ process.on('message', async (data) => {
         if (filtered.length < 10 && params.modHierarchy) {
             Logger.service(`[WORKER] Only ${filtered.length} results after filtering for user ${data.user.id}, trying progressive fallback`);
             
-            // The scores are already categorized by preference, so we can use them progressively
-            // Try to get more scores by being less restrictive
-            const allScores = algorithmResult.results;
-            const noModsFiltered = filterByMods(allScores, [], params.allowOtherMods);
-            const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
-            Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
+            // Try with primary mods first
+            const primaryModsFiltered = filterByMods(algorithmResult.results, params.modHierarchy.primaryMods, params.allowOtherMods);
+            const primaryModsFilteredOut = filterOutTop100(primaryModsFiltered, top100Osu.table);
+            Logger.service(`[WORKER] After primary mods fallback: ${primaryModsFilteredOut.length} scores`);
             
-            if (noModsFilteredOut.length > filtered.length) {
-                filtered = noModsFilteredOut;
-                Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
-            } else if (filtered.length === 0) {
-                // If still nothing, try with any mods (allowOtherMods = true)
-                const anyModsFiltered = filterByMods(allScores, params.mods, true);
-                filtered = filterOutTop100(anyModsFiltered, top100Osu.table);
-                Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
+            if (primaryModsFilteredOut.length > filtered.length) {
+                filtered = primaryModsFilteredOut;
+                Logger.service(`[WORKER] Using primary mods fallback (${filtered.length} scores)`);
+            } else {
+                // Try with no mods
+                const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
+                const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
+                Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
+                
+                if (noModsFilteredOut.length > filtered.length) {
+                    filtered = noModsFilteredOut;
+                    Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
+                } else if (filtered.length === 0) {
+                    // If still nothing, try with any mods (allowOtherMods = true)
+                    const anyModsFiltered = filterByMods(algorithmResult.results, params.mods, true);
+                    filtered = filterOutTop100(anyModsFiltered, top100Osu.table);
+                    Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
+                }
             }
         }
 

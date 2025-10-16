@@ -17,44 +17,9 @@ function filterOutTop100(results, beatmapIdSet) {
 }
 
 function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = null, isAllowOtherMods = false) {
-    if (!modHierarchy) {
-        // Fallback to original filtering if no hierarchy
-        return filterByMods(results, requiredModsArray, isAllowOtherMods);
-    }
-
-    // Return ALL scores, just categorized by preference - NO RESTRICTION
-    const prioritized = [];
-    const fallback = [];
-    const other = [];
-
-    for (const score of results) {
-        const scoreMods = parseInt(score.mods, 10);
-        const scoreModsArray = bitwiseToMods(scoreMods);
-        
-        // Check if it's an avoided mod
-        const hasAvoidedMod = modHierarchy.avoidMods.some(avoidMod => 
-            scoreModsArray.includes(avoidMod)
-        );
-
-        // Simple categorization - no filtering, just ordering
-        if (hasAvoidedMod) {
-            other.push(score); // Avoided mods go last
-        } else {
-            // Check if it matches the primary mods
-            const requiredModsArray = modHierarchy.primaryMods || [];
-            const scoreModsKey = scoreModsArray.sort().join(',');
-            const primaryModsKey = requiredModsArray.sort().join(',');
-            
-            if (scoreModsKey === primaryModsKey) {
-                prioritized.push(score);
-            } else {
-                fallback.push(score);
-            }
-        }
-    }
-
-    // Return ALL scores categorized by preference (no exclusion)
-    return [...prioritized, ...fallback, ...other];
+    // Return ALL scores without any filtering - just return them as-is
+    // The worker will handle the progressive fallback
+    return results;
 }
 
 function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {

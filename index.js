@@ -18,6 +18,7 @@ const UserRateLimiter = require('./services/UserRateLimiter');
 const notifier = new Notifier();
 const OsuUtils = require('osu-utils');
 const osuUtils = new OsuUtils();
+const TokenKeyInline = require('./services/GeneratePupswebLink');
 
 let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, userRateLimiter;
 global.temp = [];
@@ -57,18 +58,21 @@ global.userRequest = [];
             const key = `track:${id}`;
             if (trackers.some(t => t.key === key)) continue;
 
-            Logger.trackSuccess(`Tracking: ${id} for user ${uid} on beatmap ${bmid} wait ${length}s (+2min buffer)`);
+            Logger.trackSuccess(`Tracking: ${id} for user ${uid} on beatmap ${bmid} wait ${length}s (multiple intervals)`);
+
+            // Define check intervals in seconds
+            const checkIntervals = [15, 30, 60, 90, 120, 240, 600]; // 15s, 30s, 1min, 1min30s, 2min, 4min, 10min
 
             const action = async () => {
                 const index = trackers.findIndex(t => t.key === key);
                 const tracker = trackers[index];
                 const suggestionStart = tracker?.start ?? now;
-                const retries = tracker?.retries ?? 0;
+                const currentIntervalIndex = tracker?.intervalIndex ?? 0;
                 let played = null;
+
                 try {
                     played = await global.osuApiClient.getUserBeatmapScore(bmid, uid);
                     played = played?.score;
-
                 } catch (error) {
                     Logger.errorCatch('Tracker', `Failed to get user beatmap score for ${uid} on beatmap ${bmid}: ${error.message}`, error);
                     played = null;
@@ -83,51 +87,75 @@ global.userRequest = [];
 
                     const scoreDate = parsedDate.getTime();
                     const windowStart = suggestionStart - 20 * 60 * 1000;
-                    const windowEnd = suggestionStart + (length + 120 + 600) * 1000;
+                    const windowEnd = suggestionStart + (length + 600) * 1000; // Extended window
+
                     if (scoreDate >= windowStart && scoreDate <= windowEnd) {
+                        const beatmap = await global.osuApiClient.getBeatmap(bmid);
+                        const token = TokenKeyInline.generateToken(uid, played.beatmap);
+                        console.log(token);
                         await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
-                    } else {
-                        if (retries < 1) {
-                            trackers.splice(index, 1);
-                            trackers.push({
-                                key,
-                                uid,
-                                bmid,
-                                duration: 10 * 60 * 1000,
-                                start: Date.now(),
-                                retries: retries + 1,
-                                action
-                            });
-                            return;
-                        }
-                    }
-                } else {
-                    if (retries < 1) {
-                        trackers.splice(index, 1);
-                        trackers.push({
-                            key,
-                            uid,
-                            bmid,
-                            duration: 10 * 60 * 1000,
-                            start: Date.now(),
-                            retries: retries + 1,
-                            action
+                        console.log(beatmap)
+
+
+                        // Remove all trackers for this suggestion since we found the score
+                        const allTrackersForSuggestion = trackers.filter(t => t.key === key);
+                        allTrackersForSuggestion.forEach(t => {
+                            const trackerIndex = trackers.findIndex(tr => tr === t);
+                            if (trackerIndex !== -1) trackers.splice(trackerIndex, 1);
                         });
+                        let title = '';
+                        if (beatmap) {
+                            if (beatmap.title) {
+                                title = beatmap.title;
+                            } else {
+                                title = beatmap.beatmapset.title;
+                            }
+                        } else {
+                            return
+                        }
+                        console.log(played)
+                        if (!played?.mods || played.mods.length === 0) {
+                            console.log(`Waaa ! ${parseFloat(played.pp).toFixed(0)} PP on [${played.beatmap.url} ${title} - (${played.beatmap.version})] ! Thank you for your play! Don't hesitate to rate the map! Objectively (and consider it as no mods). This will train the AI and you can win an Osu!Supporter [https://pb.pupsweb.cc/help?ref=${token} -> Here]`)
+                            queue.addToQueue(played.user.username, `Waaa ! ${parseFloat(played.pp).toFixed(0)} PP on [${played.beatmap.url} ${title} - (${played.beatmap.version})] ! Thank you for your play! Don't hesitate to rate the map! Objectively (and consider it as no mods). This will train the AI and you can win an Osu!Supporter [https://pb.pupsweb.cc/help?ref=${token} -> Here]`, false, generateId(), true);
+                        }
+
                         return;
                     }
                 }
 
-                if (index !== -1) trackers.splice(index, 1);
+                // If no score found and we have more intervals to check
+                if (currentIntervalIndex < checkIntervals.length - 1) {
+                    const nextIntervalIndex = currentIntervalIndex + 1;
+                    const nextInterval = checkIntervals[nextIntervalIndex];
+
+                    if (index !== -1) trackers.splice(index, 1);
+                    trackers.push({
+                        key,
+                        uid,
+                        bmid,
+                        duration: (length + nextInterval) * 1000,
+                        start: now,
+                        retries: 0,
+                        intervalIndex: nextIntervalIndex,
+                        action
+                    });
+                } else {
+                    // No more intervals to check, remove tracker
+                    if (index !== -1) trackers.splice(index, 1);
+                }
             };
 
+            // Start with the first interval
+            const firstInterval = checkIntervals[0];
             trackers.push({
                 key,
                 uid,
                 bmid,
-                duration: (length + 120) * 1000,
+                duration: (length + firstInterval) * 1000,
                 start: now,
                 retries: 0,
+                intervalIndex: 0,
                 action
             });
         }

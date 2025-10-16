@@ -254,27 +254,30 @@ process.on('message', async (data) => {
             Logger.service(`[WORKER] Using standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
         }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
+        
+        filtered = filterOutTop100(filtered, top100Osu.table);
+        await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
         // Progressive fallback: start with preferred mods, then expand if needed
         // Only do fallback if user didn't specify mods (params.modHierarchy exists)
         if (filtered.length < 10 && params.modHierarchy) {
-            Logger.service(`[WORKER] Only ${filtered.length} results with preferred mods for user ${data.user.id}, trying progressive fallback`);
+            Logger.service(`[WORKER] Only ${filtered.length} results after filtering for user ${data.user.id}, trying progressive fallback`);
             
             // Try with no mods first
             const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
-            Logger.service(`[WORKER] After no mods fallback: ${noModsFiltered.length} scores`);
+            const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
+            Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
             
-            if (noModsFiltered.length > filtered.length) {
-                filtered = noModsFiltered;
+            if (noModsFilteredOut.length > filtered.length) {
+                filtered = noModsFilteredOut;
                 Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
             } else if (filtered.length === 0) {
                 // If still nothing, try with any mods (allowOtherMods = true)
-                filtered = filterByMods(algorithmResult.results, params.mods, true);
+                const anyModsFiltered = filterByMods(algorithmResult.results, params.mods, true);
+                filtered = filterOutTop100(anyModsFiltered, top100Osu.table);
                 Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
             }
         }
-        filtered = filterOutTop100(filtered, top100Osu.table);
-        await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
         if (algorithmResult.relaxedCriteria) {
             filtered = filtered.filter(score => score.precision < 10).sort((a, b) => b.precision - a.precision);

@@ -97,8 +97,7 @@ class IRCQueueManager {
                 Logger.queue(`Queued ${id} "${short}" → ${target}${bypass ? ' (bypass)' : ''}`);
             }
 
-            // Process queue asynchronously to avoid blocking
-            setImmediate(() => this._processQueue());
+            // Queue will be processed by the existing interval loop
         });
     }
 

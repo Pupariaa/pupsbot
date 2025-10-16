@@ -1,5 +1,7 @@
 const RedisManager = require('../../services/Redis');
 const RedisStore = require('../../services/RedisStore');
+const fs = require('fs');
+const path = require('path');
 
 async function findScoresByPPRange(range, mods, id, bpm = null) {
     const performe = new RedisStore();
@@ -15,67 +17,52 @@ async function findScoresByPPRange(range, mods, id, bpm = null) {
     await redis.connect();
 
     const useModsFilter = mods.length > 0;
+    const chunkSize = 1000; // Process in chunks of 1000
+    const maxResults = 50000; // Limit total results
+    let allResults = [];
+    let offset = 0;
 
-    const luaScript = `
-    local ids = redis.call('ZRANGEBYSCORE', KEYS[1], ARGV[1], ARGV[2], 'LIMIT', 0, 1000000)
-    local result = {}
-    local count = 0
-    local maxResults = 1000000
-    local modFilter = ARGV[3]
-    local bpmFilter = ARGV[4]
-    local bpmMargin = 10
+    const luaScriptPath = path.join(__dirname, '../../scripts/lua/findScoresByPPRange.lua');
+    const luaScript = fs.readFileSync(luaScriptPath, 'utf8');
 
-    for _, id in ipairs(ids) do
-        if count >= maxResults then break end
-
-        local mods = redis.call('HGET', id, 'mods')
-        local precision = tonumber(redis.call('HGET', id, 'precision') or "9")
-        local mode = redis.call('HGET', id, 'type')
-        local bpm = tonumber(redis.call('HGET', id, 'bpm') or "0")
-
-        if mode == 'osu' then
-            if precision <= 3 then
-                local bpmMatch = true
-                if bpmFilter ~= "none" then
-                    local targetBpm = tonumber(bpmFilter)
-                    bpmMatch = math.abs(bpm - targetBpm) <= bpmMargin
-                end
-
-                if bpmMatch then
-                    if modFilter == "any" then
-                        table.insert(result, id)
-                        count = count + 1
-                    else
-                        if mods ~= "0" and mods ~= false and mods ~= "" then
-                            table.insert(result, id)
-                            count = count + 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return result
-`;
     const t2 = performe.startTimer();
-    const rawIds = await redis.instance.eval(luaScript, {
-        keys: ['scores_by_pp'],
-        arguments: [
-            range.min.toString(),
-            range.max.toString(),
-            useModsFilter ? 'true' : 'any',
-            bpm !== null ? bpm.toString() : 'none'
-        ]
-    });
+
+    while (allResults.length < maxResults) {
+        const chunkResults = await redis.instance.eval(luaScript, {
+            keys: ['scores_by_pp'],
+            arguments: [
+                range.min.toString(),
+                range.max.toString(),
+                useModsFilter ? 'true' : 'any',
+                bpm !== null ? bpm.toString() : 'none',
+                offset.toString(),
+                chunkSize.toString(),
+                (maxResults - allResults.length).toString()
+            ]
+        });
+
+        if (chunkResults.length === 0) {
+            break; // No more data
+        }
+
+        allResults = allResults.concat(chunkResults);
+        offset += chunkSize;
+
+        // If we got fewer results than chunk size, we've reached the end
+        if (chunkResults.length < chunkSize) {
+            break;
+        }
+    }
+
+    // Limit to maxResults
+    allResults = allResults.slice(0, maxResults);
 
     const scores = await Promise.all(
-        rawIds.map(async (id) => {
+        allResults.map(async (id) => {
             const data = await redis.instance.hGetAll(id);
             return { scoreId: id, ...data };
         })
     );
-
 
     await performe.logDuration('RREAD', await t2.stop('RREAD'))
     await performe.logDuration('FSBPR', await t.stop('FSBPR'))

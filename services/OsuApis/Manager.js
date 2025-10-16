@@ -240,12 +240,10 @@ class OsuApiManager {
             });
             source = 'v2';
 
-            // Cache the result
-            try {
-                await this.redis.setex(cacheKey, 3600, JSON.stringify(beatmap));
-            } catch (cacheError) {
+            // Cache the result asynchronously to avoid blocking
+            this.redis.setex(cacheKey, 3600, JSON.stringify(beatmap)).catch(cacheError => {
                 Logger.errorCatch('OsuApiManager', `Failed to cache beatmap ${beatmapId}: ${cacheError.message}`);
-            }
+            });
 
             const duration = Date.now() - startTime;
             await this.metrics.recordServicePerformance('api', 'getBeatmap', duration, 'v2');

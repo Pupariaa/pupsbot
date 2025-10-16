@@ -9,6 +9,9 @@ const Logger = require('../utils/Logger');
 class UserPreferencesManager {
     constructor() {
         this.redis = new RedisStore();
+        this.preferencesCache = new Map();
+        this.cacheTimeout = 5 * 60 * 1000; // 5 minutes cache
+        this.lastCleanup = Date.now();
         this.defaultPreferences = {
             autoMods: true,
             mods: [],

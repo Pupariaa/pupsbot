@@ -585,8 +585,13 @@ class MetricsCollector {
             const key = `service_perf:${serviceType}:${operationKey}`;
             const timestamp = Date.now();
 
-            await this._redis.zAdd(key, { score: timestamp, value: duration.toString() });
-            await this._redis.expire(key, 86400 * 7);
+            // Use async operation to avoid blocking
+            this._redis.zAdd(key, { score: timestamp, value: duration.toString() }).catch(error => {
+                Logger.errorCatch('MetricsCollector', `Failed to record service performance: ${error.message}`);
+            });
+            this._redis.expire(key, 86400 * 7).catch(error => {
+                Logger.errorCatch('MetricsCollector', `Failed to set expiry for service performance: ${error.message}`);
+            });
 
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.SERVICE_PERF', error);

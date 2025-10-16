@@ -48,7 +48,7 @@ global.userRequest = [];
 
     Logger.service('OsuApi internal server started and client available globally');
 
-    const trackers = [];
+    const trackers = new Map(); // Use Map for O(1) access instead of array
 
     async function refreshTrackers(performe) {
         const entries = await performe.getAllTrackedSuggestions();
@@ -56,7 +56,7 @@ global.userRequest = [];
 
         for (const { id, uid, bmid, length } of entries) {
             const key = `track:${id}`;
-            if (trackers.some(t => t.key === key)) continue;
+            if (trackers.has(key)) continue;
 
             Logger.trackSuccess(`Tracking: ${id} for user ${uid} on beatmap ${bmid} wait ${length}s (multiple intervals)`);
 
@@ -64,10 +64,11 @@ global.userRequest = [];
             const checkIntervals = [15, 30, 60, 90, 120, 240, 600]; // 15s, 30s, 1min, 1min30s, 2min, 4min, 10min
 
             const action = async () => {
-                const index = trackers.findIndex(t => t.key === key);
-                const tracker = trackers[index];
-                const suggestionStart = tracker?.start ?? now;
-                const currentIntervalIndex = tracker?.intervalIndex ?? 0;
+                const tracker = trackers.get(key);
+                if (!tracker) return;
+
+                const suggestionStart = tracker.start ?? now;
+                const currentIntervalIndex = tracker.intervalIndex ?? 0;
                 let played = null;
 
                 try {
@@ -95,12 +96,8 @@ global.userRequest = [];
                         await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
 
-                        // Remove all trackers for this suggestion since we found the score
-                        const allTrackersForSuggestion = trackers.filter(t => t.key === key);
-                        allTrackersForSuggestion.forEach(t => {
-                            const trackerIndex = trackers.findIndex(tr => tr === t);
-                            if (trackerIndex !== -1) trackers.splice(trackerIndex, 1);
-                        });
+                        // Remove tracker since we found the score
+                        trackers.delete(key);
                         let title = '';
                         if (beatmap) {
                             if (beatmap.title) {
@@ -124,8 +121,7 @@ global.userRequest = [];
                     const nextIntervalIndex = currentIntervalIndex + 1;
                     const nextInterval = checkIntervals[nextIntervalIndex];
 
-                    if (index !== -1) trackers.splice(index, 1);
-                    trackers.push({
+                    trackers.set(key, {
                         key,
                         uid,
                         bmid,
@@ -137,13 +133,13 @@ global.userRequest = [];
                     });
                 } else {
                     // No more intervals to check, remove tracker
-                    if (index !== -1) trackers.splice(index, 1);
+                    trackers.delete(key);
                 }
             };
 
             // Start with the first interval
             const firstInterval = checkIntervals[0];
-            trackers.push({
+            trackers.set(key, {
                 key,
                 uid,
                 bmid,
@@ -157,7 +153,7 @@ global.userRequest = [];
     }
     async function runTrackers() {
         const now = Date.now();
-        for (const tracker of [...trackers]) {
+        for (const [key, tracker] of trackers) {
             const elapsed = now - tracker.start;
             if (elapsed >= tracker.duration) {
                 await tracker.action();

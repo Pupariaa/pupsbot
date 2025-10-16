@@ -96,6 +96,9 @@ class IRCQueueManager {
                 const short = message.length > 10 ? message.slice(0, 10) + '...' : message;
                 Logger.queue(`Queued ${id} "${short}" → ${target}${bypass ? ' (bypass)' : ''}`);
             }
+
+            // Process queue asynchronously to avoid blocking
+            setImmediate(() => this._processQueue());
         });
     }
 

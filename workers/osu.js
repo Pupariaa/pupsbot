@@ -174,47 +174,66 @@ process.on('message', async (data) => {
 
         const buildSortList = async (ppMargin) => {
             const list = [];
-            for (const score of filtered) {
-                const mapId = parseInt(score.beatmap_id);
-                if (suggestions.includes(mapId.toString())) continue;
+            const chunkSize = 10; // Process in chunks of 10 to avoid overwhelming Redis
 
-                const beatmap = await redisStore.getBeatmap(mapId);
-                if (beatmap) {
-                    const mapper = beatmap.creator?.toLowerCase() || '';
-                    const title = beatmap.title?.toLowerCase() || '';
+            // Process scores in chunks for better performance
+            for (let i = 0; i < filtered.length; i += chunkSize) {
+                const chunk = filtered.slice(i, i + chunkSize);
 
-                    if (userPreferences.mapperBan && userPreferences.mapperBan.length > 0 &&
-                        userPreferences.mapperBan.some(bannedMapper =>
-                            mapper.includes(bannedMapper.toLowerCase())
-                        )) {
-                        continue;
-                    }
+                // Process chunk in parallel
+                const chunkResults = await Promise.all(
+                    chunk.map(async (score) => {
+                        const mapId = parseInt(score.beatmap_id);
+                        if (suggestions.includes(mapId.toString())) return null;
 
-                    if (userPreferences.titleBan && userPreferences.titleBan.length > 0 &&
-                        userPreferences.titleBan.some(bannedTitle =>
-                            title.includes(bannedTitle.toLowerCase())
-                        )) {
-                        continue;
-                    }
-                }
+                        try {
+                            const beatmap = await redisStore.getBeatmap(mapId);
+                            if (beatmap) {
+                                const mapper = beatmap.creator?.toLowerCase() || '';
+                                const title = beatmap.title?.toLowerCase() || '';
 
-                const scorePP = parseFloat(score.pp);
-                let shouldInclude = false;
+                                if (userPreferences.mapperBan && userPreferences.mapperBan.length > 0 &&
+                                    userPreferences.mapperBan.some(bannedMapper =>
+                                        mapper.includes(bannedMapper.toLowerCase())
+                                    )) {
+                                    return null;
+                                }
 
-                if (params.pp !== null) {
-                    shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
-                } else {
-                    if (algorithmResult.relaxedCriteria) {
-                        shouldInclude = true;
-                    } else {
-                        shouldInclude = scorePP >= targetPP && scorePP <= targetPP + 28;
-                    }
-                }
+                                if (userPreferences.titleBan && userPreferences.titleBan.length > 0 &&
+                                    userPreferences.titleBan.some(bannedTitle =>
+                                        title.includes(bannedTitle.toLowerCase())
+                                    )) {
+                                    return null;
+                                }
+                            }
 
-                if (shouldInclude) {
-                    list.push(score);
-                }
+                            const scorePP = parseFloat(score.pp);
+                            let shouldInclude = false;
+
+                            if (params.pp !== null) {
+                                shouldInclude = Math.abs(scorePP - params.pp) <= ppMargin;
+                            } else {
+                                if (algorithmResult.relaxedCriteria) {
+                                    shouldInclude = true;
+                                } else {
+                                    shouldInclude = scorePP >= targetPP && scorePP <= targetPP + 28;
+                                }
+                            }
+
+                            return shouldInclude ? score : null;
+                        } catch (error) {
+                            Logger.errorCatch('Worker', `Failed to process score ${mapId}: ${error.message}`);
+                            return null;
+                        }
+                    })
+                );
+
+                // Add valid results to list
+                chunkResults.forEach(result => {
+                    if (result) list.push(result);
+                });
             }
+
             return list;
         };
 

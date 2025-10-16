@@ -26,27 +26,21 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
     const neutralModsMask = 32 | 16384;
     const avoidMods = modsToBitwise(modHierarchy.avoidMods);
 
-    // First pass: filter out avoided mods
-    let filtered = results.filter(score => {
-        const scoreMods = parseInt(score.mods, 10);
-        const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
-        
-        // Avoid scores with mods the user rarely uses
-        if (avoidMods > 0 && (scoreModsWithoutNeutral & avoidMods) === avoidMods) {
-            return false;
-        }
-        
-        return true;
-    });
-
-    // Second pass: prioritize by hierarchy
+    // First pass: prioritize by hierarchy, but don't exclude everything
     const prioritized = [];
     const fallback = [];
+    const other = [];
 
-    for (const score of filtered) {
+    for (const score of results) {
         const scoreMods = parseInt(score.mods, 10);
         const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
         const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
+
+        // Check if it's an avoided mod (but don't exclude completely)
+        const scoreModsArray = bitwiseToMods(scoreModsWithoutNeutral);
+        const hasAvoidedMod = modHierarchy.avoidMods.some(avoidMod => 
+            scoreModsArray.includes(avoidMod)
+        );
 
         let isPreferred = false;
 
@@ -60,21 +54,25 @@ function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = nu
 
         if (isPreferred) {
             prioritized.push(score);
+        } else if (hasAvoidedMod) {
+            // Put avoided mods at the end, but don't exclude them completely
+            other.push(score);
         } else {
             // Check if it's a fallback option
-            const scoreModsArray = bitwiseToMods(scoreModsWithoutNeutral);
             const isFallbackMod = modHierarchy.fallbackMods.some(fallbackMods => 
                 arraysEqual(scoreModsArray.sort(), fallbackMods.sort())
             );
             
             if (isFallbackMod) {
                 fallback.push(score);
+            } else {
+                other.push(score);
             }
         }
     }
 
-    // Return prioritized first, then fallback
-    return [...prioritized, ...fallback];
+    // Return prioritized first, then fallback, then others (including avoided mods as last resort)
+    return [...prioritized, ...fallback, ...other];
 }
 
 function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {

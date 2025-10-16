@@ -245,6 +245,18 @@ process.on('message', async (data) => {
 
         let filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
+        
+        // If no results with hierarchy, fallback to broader search
+        if (filtered.length === 0 && params.modHierarchy) {
+            Logger.service(`[WORKER] No results with mod hierarchy for user ${data.user.id}, falling back to broader search`);
+            
+            // Try with no mods first
+            filtered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
+            if (filtered.length === 0) {
+                // If still nothing, try with any mods (allowOtherMods = true)
+                filtered = filterByMods(algorithmResult.results, params.mods, true);
+            }
+        }
         filtered = filterOutTop100(filtered, top100Osu.table);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 

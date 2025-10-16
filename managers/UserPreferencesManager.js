@@ -43,7 +43,6 @@ class UserPreferencesManager {
 
             if (!stored) {
                 Logger.service(`[PREFERENCES] No stored preferences for user ${userId}, using defaults`);
-                console.log(`[PREFERENCES] Default preferences: ${JSON.stringify(this.defaultPreferences)}`);
                 return { ...this.defaultPreferences };
             }
 

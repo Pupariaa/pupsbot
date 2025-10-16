@@ -120,7 +120,6 @@ class OsuApiV2 {
             }
             const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
             const userData = await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
-            console.log(userData)
             const profileData = {
                 id: userData.id,
                 username: userData.username,

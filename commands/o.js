@@ -52,7 +52,7 @@ module.exports = {
                 }
             });
         } catch (e) {
-            console.log(e);
+            Logger.errorCatch('Command O', e);
             Logger.errorCatch('osu', e);
             await queue.addToQueue(event.nick, "An error occurred while executing the bm command.", false, event.id, false);
         }

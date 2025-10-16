@@ -94,6 +94,8 @@ global.userRequest = [];
                         const token = TokenKeyInline.generateToken(uid, played.beatmap);
                         await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
+
+                        // Remove all trackers for this suggestion since we found the score
                         const allTrackersForSuggestion = trackers.filter(t => t.key === key);
                         allTrackersForSuggestion.forEach(t => {
                             const trackerIndex = trackers.findIndex(tr => tr === t);
@@ -117,6 +119,7 @@ global.userRequest = [];
                     }
                 }
 
+                // If no score found and we have more intervals to check
                 if (currentIntervalIndex < checkIntervals.length - 1) {
                     const nextIntervalIndex = currentIntervalIndex + 1;
                     const nextInterval = checkIntervals[nextIntervalIndex];

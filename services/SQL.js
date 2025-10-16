@@ -14,12 +14,12 @@ class Thread2Database {
         this._connected = false;
 
         this.sequelize = new Sequelize(
-            process.env.LOGS_DB_NAME,
-            process.env.LOGS_DB_USER,
-            process.env.LOGS_DB_PASS,
+            process.env.MAIN_DB_NAME,
+            process.env.MAIN_DB_USER,
+            process.env.MAIN_DB_PASS,
             {
-                host: process.env.LOGS_DB_HOST,
-                dialect: process.env.LOGS_DB_DIALECT || 'mysql',
+                host: process.env.MAIN_DB_HOST,
+                dialect: process.env.MAIN_DB_DIALECT || 'mysql',
                 logging: false
             }
         );

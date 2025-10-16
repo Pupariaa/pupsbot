@@ -1,5 +1,5 @@
 const { DataTypes } = require('sequelize');
-const sequelize = require('../sequelize_logs');
+const sequelize = require('../services/SequelizeDB');
 
 module.exports = sequelize.define('commands_errors', {
     command_id: DataTypes.BIGINT,

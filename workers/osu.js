@@ -243,19 +243,26 @@ process.on('message', async (data) => {
             });
         }
 
-        let filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
+        let filtered;
+        if (params.modHierarchy) {
+            // Use hierarchy only if no specific mods were requested
+            filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
+            Logger.service(`[WORKER] Using mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
+        } else {
+            // Use standard filtering when user specified mods
+            filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
+            Logger.service(`[WORKER] Using standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
+        }
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
-        
-        Logger.service(`[WORKER] After mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
-        
+
         // Progressive fallback: start with preferred mods, then expand if needed
         if (filtered.length === 0 && params.modHierarchy) {
             Logger.service(`[WORKER] No results with preferred mods for user ${data.user.id}, trying progressive fallback`);
-            
+
             // Try with no mods first
             filtered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
             Logger.service(`[WORKER] After no mods fallback: ${filtered.length} scores`);
-            
+
             if (filtered.length === 0) {
                 // If still nothing, try with any mods (allowOtherMods = true)
                 filtered = filterByMods(algorithmResult.results, params.mods, true);
@@ -332,7 +339,7 @@ process.on('message', async (data) => {
                 chunkResults.forEach(result => {
                     if (result) list.push(result);
                 });
-                
+
                 // Continue processing all scores, don't stop early
             }
 

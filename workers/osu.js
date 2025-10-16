@@ -12,7 +12,7 @@ const computeTargetPP = require('../compute/osu/targetPP');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
-const { filterOutTop100, filterByMods, pickClosestToTargetPP } = require('../utils/osu/ScoreFilters');
+const { filterOutTop100, filterByMods, filterByModsWithHierarchy, pickClosestToTargetPP } = require('../utils/osu/ScoreFilters');
 const AlgorithmManager = require('../managers/AlgorithmManager');
 const UserPreferencesManager = require('../managers/UserPreferencesManager');
 
@@ -20,6 +20,81 @@ const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
 const algorithmManager = new AlgorithmManager();
 const userPreferencesManager = new UserPreferencesManager();
+
+function createModHierarchy(userModsAnalysis) {
+    const avoidThreshold = 5; // Avoid mods used less than 5%
+    const dominantThreshold = 20; // Consider dominant if used more than 20%
+
+    const avoidMods = [];
+    const dominantMods = [];
+    const moderateMods = [];
+    const noMods = userModsAnalysis.modsDistribution['NM'] || { percentage: 0 };
+
+    // Analyze each mod combination
+    for (const [modsKey, data] of Object.entries(userModsAnalysis.modsDistribution)) {
+        if (modsKey === 'NM') continue;
+
+        const percentage = data.percentage;
+        const mods = modsKey.split(',');
+
+        if (percentage < avoidThreshold) {
+            // Avoid mods that are rarely used
+            avoidMods.push(...mods);
+        } else if (percentage >= dominantThreshold) {
+            // Dominant mods
+            dominantMods.push({ mods, percentage, weight: data.percentage / 100 });
+        } else {
+            // Moderate usage mods
+            moderateMods.push({ mods, percentage, weight: data.percentage / 100 });
+        }
+    }
+
+    // Remove duplicates
+    const uniqueAvoidMods = [...new Set(avoidMods)];
+    const uniqueDominantMods = dominantMods.map(d => d.mods.join(','));
+    const uniqueModerateMods = moderateMods.map(m => m.mods.join(','));
+
+    // Create hierarchy: dominant mods first, then no mods, then moderate mods
+    let primaryMods = [];
+    let fallbackMods = [];
+
+    if (uniqueDominantMods.length > 0) {
+        // Use most dominant mod combination
+        const mostDominant = dominantMods.sort((a, b) => b.percentage - a.percentage)[0];
+        primaryMods = mostDominant.mods;
+
+        // Add some randomness: 20% chance to use other dominant mods
+        if (Math.random() < 0.2 && dominantMods.length > 1) {
+            const randomDominant = dominantMods[Math.floor(Math.random() * dominantMods.length)];
+            primaryMods = randomDominant.mods;
+        }
+    } else if (noMods.percentage > 10) {
+        // If no dominant mods, prefer no mods if user uses them reasonably
+        primaryMods = [];
+    } else if (uniqueModerateMods.length > 0) {
+        // Fallback to moderate mods
+        const randomModerate = moderateMods[Math.floor(Math.random() * moderateMods.length)];
+        primaryMods = randomModerate.mods;
+    }
+
+    // Create fallback chain: primary -> no mods -> moderate mods
+    fallbackMods = [];
+    if (primaryMods.length > 0) {
+        fallbackMods.push([]); // No mods as first fallback
+    }
+    if (uniqueModerateMods.length > 0) {
+        fallbackMods.push(...uniqueModerateMods.map(mods => mods.split(',')));
+    }
+
+    return {
+        primaryMods,
+        fallbackMods,
+        avoidMods: uniqueAvoidMods,
+        dominantMods: uniqueDominantMods,
+        moderateMods: uniqueModerateMods,
+        noModsPercentage: noMods.percentage
+    };
+}
 
 
 async function sendErrorResponse(data, errorCode, message) {
@@ -109,11 +184,13 @@ process.on('message', async (data) => {
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
             await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
-            
-            // If no specific mods requested and user has dominant mods, use them
-            if (params.mods.length === 0 && userModsAnalysis.primaryMods.length > 0) {
-                params.mods = userModsAnalysis.primaryMods;
-                Logger.service(`[WORKER] Using dominant mods for user ${data.user.id}: ${params.mods.join(',')} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
+
+            // If no specific mods requested, create intelligent mod hierarchy
+            if (params.mods.length === 0) {
+                const modHierarchy = createModHierarchy(userModsAnalysis);
+                params.mods = modHierarchy.primaryMods;
+                params.modHierarchy = modHierarchy;
+                Logger.service(`[WORKER] Using mod hierarchy for user ${data.user.id}: Primary=${modHierarchy.primaryMods.join(',')}, Avoid=${modHierarchy.avoidMods.join(',')}`);
             }
         }
 
@@ -166,7 +243,7 @@ process.on('message', async (data) => {
             });
         }
 
-        let filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
+        let filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
         filtered = filterOutTop100(filtered, top100Osu.table);
         await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');

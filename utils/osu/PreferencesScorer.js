@@ -2,13 +2,13 @@
  * Calculates preference scores based on user's gaming habits
  */
 
-function calculatePreferenceScore(score, userStats) {
+function calculatePreferenceScore(score, userStats, userModsAnalysis = null) {
     let totalScore = 0;
     let factors = 0;
 
     // Mods preference (weight: 40%)
     if (userStats.modsDistribution) {
-        const modsScore = calculateModsPreferenceScore(score, userStats.modsDistribution);
+        const modsScore = calculateModsPreferenceScore(score, userStats.modsDistribution, userModsAnalysis);
         totalScore += modsScore * 0.4;
         factors += 0.4;
     }
@@ -30,12 +30,31 @@ function calculatePreferenceScore(score, userStats) {
     return factors > 0 ? totalScore / factors : 0;
 }
 
-function calculateModsPreferenceScore(score, userModsDistribution) {
+function calculateModsPreferenceScore(score, userModsDistribution, userModsAnalysis = null) {
     if (!score.mods || score.mods === "0" || score.mods === "") {
         return parseFloat(userModsDistribution['NM']?.percentage || '0');
     }
 
     const scoreMods = score.mods.split(',').filter(mod => mod.trim() !== '');
+    
+    // If we have mods analysis, prioritize dominant mods
+    if (userModsAnalysis && userModsAnalysis.primaryMods.length > 0) {
+        const scoreModsKey = scoreMods.sort().join(',');
+        const primaryModsKey = userModsAnalysis.primaryMods.sort().join(',');
+        
+        // Exact match with primary mods gets highest score
+        if (scoreModsKey === primaryModsKey) {
+            return userModsAnalysis.primaryWeight * 100;
+        }
+        
+        // Partial match with primary mods gets medium score
+        const hasPrimaryMods = userModsAnalysis.primaryMods.some(mod => scoreMods.includes(mod));
+        if (hasPrimaryMods) {
+            return userModsAnalysis.primaryWeight * 50;
+        }
+    }
+
+    // Fallback to individual mod analysis
     let totalPreferenceScore = 0;
     let modCount = 0;
 

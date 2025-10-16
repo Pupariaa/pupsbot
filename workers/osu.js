@@ -109,6 +109,12 @@ process.on('message', async (data) => {
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
             await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
+            
+            // If no specific mods requested and user has dominant mods, use them
+            if (params.mods.length === 0 && userModsAnalysis.primaryMods.length > 0) {
+                params.mods = userModsAnalysis.primaryMods;
+                Logger.service(`[WORKER] Using dominant mods for user ${data.user.id}: ${params.mods.join(',')} (${(userModsAnalysis.primaryWeight * 100).toFixed(1)}%)`);
+            }
         }
 
         const userStats = analyzeUserPreferences(top100Osu.tr);
@@ -154,8 +160,8 @@ process.on('message', async (data) => {
 
         if (algorithmResult.results && algorithmResult.results.length > 0 && userStats) {
             algorithmResult.results.sort((a, b) => {
-                const scoreA = calculatePreferenceScore(a, userStats);
-                const scoreB = calculatePreferenceScore(b, userStats);
+                const scoreA = calculatePreferenceScore(a, userStats, userModsAnalysis);
+                const scoreB = calculatePreferenceScore(b, userStats, userModsAnalysis);
                 return scoreB - scoreA;
             });
         }

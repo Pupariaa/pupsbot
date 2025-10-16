@@ -256,14 +256,18 @@ process.on('message', async (data) => {
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
 
         // Progressive fallback: start with preferred mods, then expand if needed
-        if (filtered.length === 0 && params.modHierarchy) {
-            Logger.service(`[WORKER] No results with preferred mods for user ${data.user.id}, trying progressive fallback`);
-
+        // Only do fallback if user didn't specify mods (params.modHierarchy exists)
+        if (filtered.length < 10 && params.modHierarchy) {
+            Logger.service(`[WORKER] Only ${filtered.length} results with preferred mods for user ${data.user.id}, trying progressive fallback`);
+            
             // Try with no mods first
-            filtered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
-            Logger.service(`[WORKER] After no mods fallback: ${filtered.length} scores`);
-
-            if (filtered.length === 0) {
+            const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
+            Logger.service(`[WORKER] After no mods fallback: ${noModsFiltered.length} scores`);
+            
+            if (noModsFiltered.length > filtered.length) {
+                filtered = noModsFiltered;
+                Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
+            } else if (filtered.length === 0) {
                 // If still nothing, try with any mods (allowOtherMods = true)
                 filtered = filterByMods(algorithmResult.results, params.mods, true);
                 Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);

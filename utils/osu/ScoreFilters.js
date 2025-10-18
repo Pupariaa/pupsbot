@@ -16,31 +16,12 @@ function filterOutTop100(results, beatmapIdSet) {
     return results;
 }
 
+// COMMENTED: Mod hierarchy system - reverting to original behavior
+/*
 function filterByModsWithHierarchy(results, requiredModsArray, modHierarchy = null, isAllowOtherMods = false) {
     // Return ALL scores without any filtering - just return them as-is
     // The worker will handle the progressive fallback
     return results;
-}
-
-function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {
-    const requiredMods = modsToBitwise(requiredModsArray);
-    const neutralModsMask = 32 | 16384;
-
-    return results.filter(score => {
-        const scoreMods = parseInt(score.mods, 10);
-        const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
-        const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
-
-        if (requiredWithoutNeutral === 0 && !isAllowOtherMods) {
-            return scoreModsWithoutNeutral === 0;
-        }
-
-        if (isAllowOtherMods) {
-            return (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
-        } else {
-            return scoreModsWithoutNeutral === requiredWithoutNeutral;
-        }
-    });
 }
 
 function bitwiseToMods(bitwise) {
@@ -67,6 +48,28 @@ function arraysEqual(a, b) {
     }
     return true;
 }
+*/
+
+function filterByMods(results, requiredModsArray, isAllowOtherMods = false) {
+    const requiredMods = modsToBitwise(requiredModsArray);
+    const neutralModsMask = 32 | 16384;
+
+    return results.filter(score => {
+        const scoreMods = parseInt(score.mods, 10);
+        const scoreModsWithoutNeutral = scoreMods & ~neutralModsMask;
+        const requiredWithoutNeutral = requiredMods & ~neutralModsMask;
+
+        if (requiredWithoutNeutral === 0 && !isAllowOtherMods) {
+            return scoreModsWithoutNeutral === 0;
+        }
+
+        if (isAllowOtherMods) {
+            return (scoreModsWithoutNeutral & requiredWithoutNeutral) === requiredWithoutNeutral;
+        } else {
+            return scoreModsWithoutNeutral === requiredWithoutNeutral;
+        }
+    });
+}
 
 function pickBestRandomPrecision(filtered) {
     for (let precision = 1; precision <= 8; precision++) {
@@ -77,6 +80,57 @@ function pickBestRandomPrecision(filtered) {
         }
     }
     return null;
+}
+
+function pickClosestToTargetPPWithDistribution(filtered, targetPP, distributionManager) {
+    if (!filtered || filtered.length === 0) return null;
+
+    // Create distribution tiers for better prioritization
+    const scoresWithTiers = filtered.map(score => {
+        const scorePP = parseFloat(score.pp);
+        const ppDiff = Math.abs(scorePP - targetPP);
+
+        const beatmapId = parseInt(score.beatmap_id);
+        const distributionCount = distributionManager.getDistributionCount(beatmapId);
+
+        // Define distribution tiers
+        let distributionTier;
+        if (distributionCount === 0) {
+            distributionTier = 1; // Highest priority - never distributed
+        } else if (distributionCount <= 5) {
+            distributionTier = 2; // Very low distribution
+        } else if (distributionCount <= 15) {
+            distributionTier = 3; // Low distribution
+        } else if (distributionCount <= 50) {
+            distributionTier = 4; // Medium distribution
+        } else {
+            distributionTier = 5; // High distribution - lowest priority
+        }
+
+        return {
+            score,
+            ppDiff,
+            distributionCount,
+            distributionTier
+        };
+    });
+
+    // Sort by tier first, then by PP closeness within each tier
+    scoresWithTiers.sort((a, b) => {
+        // Primary sort: distribution tier (lower = better)
+        if (a.distributionTier !== b.distributionTier) {
+            return a.distributionTier - b.distributionTier;
+        }
+
+        // Secondary sort: PP closeness (lower diff = better)
+        return a.ppDiff - b.ppDiff;
+    });
+
+    // Log selection info
+    const selected = scoresWithTiers[0];
+    console.log(`[DISTRIBUTION_SELECTION] Selected beatmap ${selected.score.beatmap_id} with ${selected.distributionCount} distributions (tier ${selected.distributionTier}, PP diff: ${selected.ppDiff.toFixed(1)})`);
+
+    return selected.score;
 }
 
 function pickClosestToTargetPP(filtered, targetPP) {
@@ -92,7 +146,8 @@ function pickClosestToTargetPP(filtered, targetPP) {
 module.exports = {
     filterOutTop100,
     filterByMods,
-    filterByModsWithHierarchy,
+    // filterByModsWithHierarchy, // COMMENTED: Mod hierarchy system
     pickBestRandomPrecision,
-    pickClosestToTargetPP
+    pickClosestToTargetPP,
+    pickClosestToTargetPPWithDistribution
 };

@@ -45,8 +45,90 @@ global.userRequest = [];
     global.workerMonitor = workerMonitor;
     global.botHealthMonitor = healthMonitor;
     global.osuApiClient = new OsuApiClient('http://localhost:25586');
+    global.performe = performe;
+    global.db = db;
 
     Logger.service('OsuApi internal server started and client available globally');
+
+    // Service health check function
+    async function checkServiceHealth() {
+        const health = {
+            healthy: true,
+            message: '',
+            details: ''
+        };
+
+        Logger.service('Starting service health check...');
+
+        // Check Redis connection with timeout and error isolation
+        try {
+            // Create a new Redis connection for testing to avoid interference
+            const testRedis = new RedisStore();
+            await testRedis.init();
+
+            const redisPromise = testRedis.getTop100('test');
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Redis timeout')), 2000)
+            );
+
+            await Promise.race([redisPromise, timeoutPromise]);
+            await testRedis.close();
+            Logger.service('Redis health check: OK');
+        } catch (error) {
+            Logger.service(`Redis health check failed: ${error.code || error.message}`);
+
+            // Handle all types of connection errors
+            if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' ||
+                error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' ||
+                error.code === 'EHOSTUNREACH' || error.code === 'ENETUNREACH' ||
+                error.message.includes('ECONNRESET') || error.message.includes('ECONNREFUSED') ||
+                error.message.includes('timeout') || error.message.includes('Redis timeout')) {
+                health.healthy = false;
+                health.details = `Redis connection error: ${error.code || error.message}`;
+                health.message = 'Service temporarily unavailable (Redis). Please try again in a few moments.';
+                Logger.service(`Service health check result: ${health.details}`);
+                return health;
+            }
+            // For other Redis errors, continue to check DB
+            Logger.errorCatch('Redis health check warning', error);
+        }
+
+        // Check Database connection with timeout and error isolation
+        try {
+            // Create a new DB connection for testing to avoid interference
+            const testDb = new SQL();
+            await testDb.connect();
+
+            const dbPromise = testDb.getSuggestions(0);
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Database timeout')), 2000)
+            );
+
+            await Promise.race([dbPromise, timeoutPromise]);
+            await testDb.disconnect();
+            Logger.service('Database health check: OK');
+        } catch (error) {
+            Logger.service(`Database health check failed: ${error.code || error.message}`);
+
+            // Handle all types of connection errors
+            if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' ||
+                error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' ||
+                error.code === 'EHOSTUNREACH' || error.code === 'ENETUNREACH' ||
+                error.message.includes('ECONNRESET') || error.message.includes('ECONNREFUSED') ||
+                error.message.includes('timeout') || error.message.includes('Database timeout')) {
+                health.healthy = false;
+                health.details = `Database connection error: ${error.code || error.message}`;
+                health.message = 'Service temporarily unavailable (Database). Please try again in a few moments.';
+                Logger.service(`Service health check result: ${health.details}`);
+                return health;
+            }
+            // For other DB errors, continue
+            Logger.errorCatch('Database health check warning', error);
+        }
+
+        Logger.service('Service health check: All services OK');
+        return health;
+    }
 
     const trackers = new Map(); // Use Map for O(1) access instead of array
 
@@ -91,26 +173,26 @@ global.userRequest = [];
                     const windowEnd = suggestionStart + (length + 600) * 1000; // Extended window
 
                     if (scoreDate >= windowStart && scoreDate <= windowEnd) {
-                        const beatmap = await global.osuApiClient.getBeatmap(bmid);
-                        const token = TokenKeyInline.generateToken(uid, played.beatmap);
+                        // const beatmap = await global.osuApiClient.getBeatmap(bmid);
+                        // const token = TokenKeyInline.generateToken(uid, played.beatmap);
                         await db.updateSuggestion(id, played.pp || 0, played.id, osuUtils.ModsStringToInt(played.mods.join('')));
                         Logger.trackSuccess(`✅ Score realised → Saved PP:${played.pp || 0} for ID:${id}`);
 
                         // Remove tracker since we found the score
                         trackers.delete(key);
-                        let title = '';
-                        if (beatmap) {
-                            if (beatmap.title) {
-                                title = beatmap.title;
-                            } else {
-                                title = beatmap.beatmapset.title;
-                            }
-                        } else {
-                            return
-                        }
-                        if (!played?.mods || played.mods.length === 0) {
-                            queue.addToQueue(played.user.username, `Waaa ! ${parseFloat(played.pp).toFixed(0)} PP on [${played.beatmap.url} ${title} - (${played.beatmap.version})] ! Thank you for your play! Don't hesitate to rate the map! Objectively (and consider it as no mods). This will train the AI and you can win an Osu!Supporter [https://pb.pupsweb.cc/help?ref=${token} -> Here]`, false, generateId(), true);
-                        }
+                        // let title = '';
+                        // if (beatmap) {
+                        //     if (beatmap.title) {
+                        //         title = beatmap.title;
+                        //     } else {
+                        //         title = beatmap.beatmapset.title;
+                        //     }
+                        // } else {
+                        //     return
+                        // }
+                        // if (!played?.mods || played.mods.length === 0) {
+                        //     queue.addToQueue(played.user.username, `Waaa ! ${parseFloat(played.pp).toFixed(0)} PP on [${played.beatmap.url} ${title} - (${played.beatmap.version})] ! Thank you for your play! Don't hesitate to rate the map! Objectively (and consider it as no mods). This will train the AI and you can win an Osu!Supporter [https://pb.pupsweb.cc/help?ref=${token} -> Here]`, false, generateId(), true);
+                        // }
 
                         return;
                     }
@@ -267,6 +349,9 @@ global.userRequest = [];
                 // Add rate limit info to event for worker validation
                 event.rateLimitValid = true;
 
+                // TEMPORARILY DISABLED - Too many Redis errors interfering
+                // Will implement error detection in the command flow instead
+
                 let user = null;
                 try {
                     user = await global.osuApiClient.getUser(event.nick);
@@ -317,11 +402,31 @@ async function gracefulShutdown() {
 }
 
 process.on('uncaughtException', (err) => {
-    Logger.errorCatch('uncaughtException', err);
+    // Don't spam logs for connection errors during testing
+    if (err.code === 'ECONNRESET' || err.code === 'ECONNREFUSED' ||
+        err.code === 'EHOSTUNREACH' || err.code === 'ENETUNREACH') {
+        // Only log once every 10 seconds to avoid spam
+        if (!global.lastConnectionErrorLog || Date.now() - global.lastConnectionErrorLog > 10000) {
+            Logger.service(`Connection error (expected during testing): ${err.code}`);
+            global.lastConnectionErrorLog = Date.now();
+        }
+    } else {
+        Logger.errorCatch('uncaughtException', err);
+    }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    Logger.errorCatch('unhandledRejection', reason);
+    // Don't spam logs for connection errors during testing
+    if (reason && (reason.code === 'ECONNRESET' || reason.code === 'ECONNREFUSED' ||
+        reason.code === 'EHOSTUNREACH' || reason.code === 'ENETUNREACH')) {
+        // Only log once every 10 seconds to avoid spam
+        if (!global.lastConnectionErrorLog || Date.now() - global.lastConnectionErrorLog > 10000) {
+            Logger.service(`Connection rejection (expected during testing): ${reason.code}`);
+            global.lastConnectionErrorLog = Date.now();
+        }
+    } else {
+        Logger.errorCatch('unhandledRejection', reason);
+    }
 });
 
 process.on('SIGINT', gracefulShutdown);

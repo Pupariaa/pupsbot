@@ -21,18 +21,22 @@ module.exports = {
             }
             const u = user;
             const responseMessage = u.locale === 'FR'
-                ? `-- v2.3.0 Nouvelle mise à jour Pupsbot ! --
-            - Renforcement du userRateLimit
-            - Implémentation des préférences persistantes
-            - 4 nouveaux algorithmes de calcul de PP
-            - Fix des bugs et améliorations
+                ? `-- v2.3.2 Nouvelle mise à jour Pupsbot ! --
+            - Système de tracking amélioré avec Map et intervalles multiples
+            - Gestion TTL optimisée pour les suggestions Redis
+            - Sélection intelligente des beatmaps avec DistributionManager
+            - Gestion d'erreurs renforcée pour Redis et Database
+            - Vérifications de santé des services (Health Checks)
+            - Système de fallback progressif pour de meilleurs résultats
             - Dashboard de suivi des suggestions et modifications des préférences [https://pb.pupsweb.cc -> Lien]
                 `
-                : `-- v2.3.0 New Pupsbot Update! --
-            - UserRateLimit enforcement
-            - Persistent preferences implementation
-            - 4 new PP calculation algorithms
-            - Bug fixes and improvements
+                : `-- v2.3.2 New Pupsbot Update! --
+            - Enhanced tracking system with Map and multiple intervals
+            - Optimized TTL management for Redis suggestions
+            - Intelligent beatmap selection with DistributionManager
+            - Improved error handling for Redis and Database
+            - Service health checks implementation
+            - Progressive fallback system for better results
             - Dashboard for tracking suggestions and modifying preferences [https://pb.pupsweb.cc -> Link]
                 `;
 

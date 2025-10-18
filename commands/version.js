@@ -45,8 +45,8 @@ module.exports = {
             const link = `https://github.com/Pupariaa/pupsbot/tree/v${version}`;
 
             const responseMessage = isFR
-                ? `🚀 Version de Pupsbot: ${version} | 📅 Build: ${buildDate} | ✨ Nouveautés: Sécurité renforcée, logs améliorés, observabilité (Metrics & Health Monitor) | 🔗 ${link}`
-                : `🚀 Pupsbot version: ${version} | 📅 Build: ${buildDate} | ✨ New: Enhanced security, improved logging, observability (Metrics & Health Monitor) | 🔗 ${link}`;
+                ? `🚀 Version de Pupsbot: ${version} | 📅 Build: ${buildDate} | ✨ Nouveautés: Système de tracking amélioré, gestion TTL optimisée, sélection intelligente des beatmaps, gestion d'erreurs renforcée | 🔗 ${link}`
+                : `🚀 Pupsbot version: ${version} | 📅 Build: ${buildDate} | ✨ New: Enhanced tracking system, optimized TTL management, intelligent beatmap selection, improved error handling | 🔗 ${link}`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await metricsCollector.updateCommandResult(event.id, 'success');

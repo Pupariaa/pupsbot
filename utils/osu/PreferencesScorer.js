@@ -36,7 +36,9 @@ function calculateModsPreferenceScore(score, userModsDistribution, userModsAnaly
     }
 
     const scoreMods = score.mods.split(',').filter(mod => mod.trim() !== '');
-    
+
+    // COMMENTED: Mod hierarchy system - reverting to original behavior
+    /*
     // If we have mods analysis, prioritize dominant mods
     if (userModsAnalysis && userModsAnalysis.primaryMods.length > 0) {
         const scoreModsKey = scoreMods.sort().join(',');
@@ -53,8 +55,9 @@ function calculateModsPreferenceScore(score, userModsDistribution, userModsAnaly
             return userModsAnalysis.primaryWeight * 50;
         }
     }
+    */
 
-    // Fallback to individual mod analysis
+    // ORIGINAL BEHAVIOR: Individual mod analysis
     let totalPreferenceScore = 0;
     let modCount = 0;
 

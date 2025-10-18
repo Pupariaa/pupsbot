@@ -163,12 +163,24 @@ class Performe {
         try {
             await metricsCollector.init();
             await this._ensureReady();
-            const key = `user:${userId}:suggested`;
-            await this._redis.sAdd(key, bmid);
-            await this._redis.sAdd(key, mods ? mods : 0);
-            await this._redis.sAdd(key, startTime.toString());
-            await this._redis.sAdd(key, algo);
-            await this._redis.expire(key, ttl);
+
+            // Create individual suggestion key with TTL
+            const suggestionKey = `user:${userId}:suggestion:${bmid}:${Date.now()}`;
+            const suggestionData = {
+                beatmapId: bmid,
+                mods: mods || 0,
+                algorithm: algo,
+                timestamp: Date.now()
+            };
+
+            // Store suggestion data
+            await this._redis.hSet(suggestionKey, suggestionData);
+            await this._redis.expire(suggestionKey, ttl);
+
+            // Add to user's suggestion list (for quick lookup)
+            const userSuggestionsKey = `user:${userId}:suggestions`;
+            await this._redis.sAdd(userSuggestionsKey, suggestionKey);
+            await this._redis.expire(userSuggestionsKey, ttl);
 
             const duration = Date.now() - startTime;
             await metricsCollector.recordServicePerformance('redis', 'addSuggestion', duration);
@@ -187,12 +199,25 @@ class Performe {
         try {
             await metricsCollector.init();
             await this._ensureReady();
-            const result = await this._redis.sMembers(`user:${userId}:suggested`);
+
+            const userSuggestionsKey = `user:${userId}:suggestions`;
+            const suggestionKeys = await this._redis.sMembers(userSuggestionsKey);
+
+            const suggestions = [];
+            for (const suggestionKey of suggestionKeys) {
+                const suggestionData = await this._redis.hGetAll(suggestionKey);
+                if (suggestionData && suggestionData.beatmapId) {
+                    suggestions.push(suggestionData.beatmapId);
+                } else {
+                    // Remove expired/invalid suggestion keys
+                    await this._redis.sRem(userSuggestionsKey, suggestionKey);
+                }
+            }
 
             const duration = Date.now() - startTime;
             await metricsCollector.recordServicePerformance('redis', 'getUserSuggestions', duration);
 
-            return result;
+            return suggestions;
         } catch (error) {
             Logger.errorCatch('PERFORME.GET_SUGGESTIONS', error);
             return [];

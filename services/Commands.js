@@ -48,6 +48,22 @@ class CommandManager {
             await command.execute(event, args, queue, lastRequests, user);
         } catch (error) {
             Logger.errorCatch(`CommandManager::${commandName}`, error);
+
+            // Check if it's a connection error and send appropriate message
+            if (error.code === 'ECONNRESET' || error.code === 'ECONNREFUSED' ||
+                error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT' ||
+                error.code === 'EHOSTUNREACH' || error.code === 'ENETUNREACH' ||
+                error.message.includes('ECONNRESET') || error.message.includes('ECONNREFUSED')) {
+
+                const errorMessage = error.message.includes('Redis') || error.message.includes('redis') ?
+                    'Service temporarily unavailable (Redis). Please try again in a few moments.' :
+                    'Service temporarily unavailable (Database). Please try again in a few moments.';
+
+                await queue.addToQueue(event.nick, errorMessage, true, event.id, false);
+                Logger.service(`Connection error detected, sent error message to ${event.nick}`);
+                return;
+            }
+
             await notifier.send(
                 `Error while executing !${commandName} from ${event.nick}: ${error.message}`,
                 `COMMANDS.EXEC_${commandName.toUpperCase()}`

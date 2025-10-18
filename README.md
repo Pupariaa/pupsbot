@@ -397,7 +397,7 @@ osu! user: Puparia
 
 ## Special thanks
 
-- Vanilleu ♥
+- Vanille ♥
 - lakazatong ♥
 
 ## About the Author

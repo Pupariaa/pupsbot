@@ -11,3 +11,4 @@ logs/application.log
 MONITORING_README.md
 /logs
 CHANGELOG*.md
+*.json

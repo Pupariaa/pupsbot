@@ -26,7 +26,6 @@ module.exports = {
             - Gestion TTL optimisée pour les suggestions Redis
             - Sélection intelligente des beatmaps avec DistributionManager
             - Gestion d'erreurs renforcée pour Redis et Database
-            - Vérifications de santé des services (Health Checks)
             - Système de fallback progressif pour de meilleurs résultats
             - Dashboard de suivi des suggestions et modifications des préférences [https://pb.pupsweb.cc -> Lien]
                 `
@@ -35,7 +34,6 @@ module.exports = {
             - Optimized TTL management for Redis suggestions
             - Intelligent beatmap selection with DistributionManager
             - Improved error handling for Redis and Database
-            - Service health checks implementation
             - Progressive fallback system for better results
             - Dashboard for tracking suggestions and modifying preferences [https://pb.pupsweb.cc -> Link]
                 `;

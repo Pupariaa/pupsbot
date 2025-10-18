@@ -12,89 +12,17 @@ const computeTargetPP = require('../compute/osu/targetPP');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
-const { filterOutTop100, filterByMods, filterByModsWithHierarchy, pickClosestToTargetPP } = require('../utils/osu/ScoreFilters');
+const { filterOutTop100, filterByMods, pickClosestToTargetPP, pickClosestToTargetPPWithDistribution } = require('../utils/osu/ScoreFilters');
+// const { filterByModsWithHierarchy } = require('../utils/osu/ScoreFilters'); // COMMENTED: Mod hierarchy system
 const AlgorithmManager = require('../managers/AlgorithmManager');
 const UserPreferencesManager = require('../managers/UserPreferencesManager');
+const DistributionManager = require('../services/DistributionManager');
 
 const osuApi = new OsuApiClient('http://localhost:25586');
 const notifier = new Notifier();
 const algorithmManager = new AlgorithmManager();
 const userPreferencesManager = new UserPreferencesManager();
-
-function createModHierarchy(userModsAnalysis) {
-    const avoidThreshold = 2; // Avoid mods used less than 2% (was 5%)
-    const dominantThreshold = 15; // Consider dominant if used more than 15% (was 20%)
-
-    const avoidMods = [];
-    const dominantMods = [];
-    const moderateMods = [];
-    const noMods = userModsAnalysis.modsDistribution['NM'] || { percentage: 0 };
-
-    // Analyze each mod combination
-    for (const [modsKey, data] of Object.entries(userModsAnalysis.modsDistribution)) {
-        if (modsKey === 'NM') continue;
-
-        const percentage = data.percentage;
-        const mods = modsKey.split(',');
-
-        if (percentage < avoidThreshold) {
-            // Avoid mods that are rarely used
-            avoidMods.push(...mods);
-        } else if (percentage >= dominantThreshold) {
-            // Dominant mods
-            dominantMods.push({ mods, percentage, weight: data.percentage / 100 });
-        } else {
-            // Moderate usage mods
-            moderateMods.push({ mods, percentage, weight: data.percentage / 100 });
-        }
-    }
-
-    // Remove duplicates
-    const uniqueAvoidMods = [...new Set(avoidMods)];
-    const uniqueDominantMods = dominantMods.map(d => d.mods.join(','));
-    const uniqueModerateMods = moderateMods.map(m => m.mods.join(','));
-
-    // Create hierarchy: dominant mods first, then no mods, then moderate mods
-    let primaryMods = [];
-    let fallbackMods = [];
-
-    if (uniqueDominantMods.length > 0) {
-        // Use most dominant mod combination
-        const mostDominant = dominantMods.sort((a, b) => b.percentage - a.percentage)[0];
-        primaryMods = mostDominant.mods;
-
-        // Add some randomness: 20% chance to use other dominant mods
-        if (Math.random() < 0.2 && dominantMods.length > 1) {
-            const randomDominant = dominantMods[Math.floor(Math.random() * dominantMods.length)];
-            primaryMods = randomDominant.mods;
-        }
-    } else if (noMods.percentage > 10) {
-        // If no dominant mods, prefer no mods if user uses them reasonably
-        primaryMods = [];
-    } else if (uniqueModerateMods.length > 0) {
-        // Fallback to moderate mods
-        const randomModerate = moderateMods[Math.floor(Math.random() * moderateMods.length)];
-        primaryMods = randomModerate.mods;
-    }
-
-    // Create fallback chain: primary -> no mods -> moderate mods
-    fallbackMods = [];
-    if (primaryMods.length > 0) {
-        fallbackMods.push([]); // No mods as first fallback
-    }
-    if (uniqueModerateMods.length > 0) {
-        fallbackMods.push(...uniqueModerateMods.map(mods => mods.split(',')));
-    }
-
-    return {
-        primaryMods,
-        fallbackMods,
-        avoidMods: uniqueAvoidMods,
-        dominantMods: uniqueDominantMods,
-        moderateMods: uniqueModerateMods,
-        noModsPercentage: noMods.percentage
-    };
-}
+const distributionManager = new DistributionManager();
 
 
 async function sendErrorResponse(data, errorCode, message) {
@@ -133,6 +61,7 @@ process.on('message', async (data) => {
     try {
         Logger.task('OSU Worker received data, starting processing...');
         await userPreferencesManager.init();
+        await distributionManager.loadDistributionData();
         const user = data.user;
         const userPreferences = await userPreferencesManager.getUserPreferences(user.id);
         const params = parseCommandParameters(data.event.message, 'osu', userPreferences);
@@ -184,7 +113,8 @@ process.on('message', async (data) => {
         const userModsAnalysis = analyzeUserMods(top100Osu.tr);
         if (userModsAnalysis) {
             await redisStore.setUserModsAnalysis(data.user.id, userModsAnalysis, 3600);
-
+            // COMMENTED: Mod hierarchy system - reverting to original behavior
+            /*
             // If no specific mods requested, create intelligent mod hierarchy
             if (params.mods.length === 0) {
                 const modHierarchy = createModHierarchy(userModsAnalysis);
@@ -192,6 +122,7 @@ process.on('message', async (data) => {
                 params.modHierarchy = modHierarchy;
                 Logger.service(`[WORKER] Using mod hierarchy for user ${data.user.id}: Primary=${modHierarchy.primaryMods.join(',')}, Avoid=${modHierarchy.avoidMods.join(',')}`);
             }
+            */
         }
 
         const userStats = analyzeUserPreferences(top100Osu.tr);
@@ -244,54 +175,88 @@ process.on('message', async (data) => {
         }
 
         Logger.service(`[WORKER] Starting with ${algorithmResult.results.length} total scores for user ${data.user.id}`);
-        
-        let filtered;
-        if (params.modHierarchy) {
-            // Use hierarchy only if no specific mods were requested
-            filtered = filterByModsWithHierarchy(algorithmResult.results, params.mods, params.modHierarchy, params.allowOtherMods);
-            Logger.service(`[WORKER] After mod hierarchy filtering: ${filtered.length} scores for user ${data.user.id}`);
-        } else {
-            // Use standard filtering when user specified mods
-            filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
-            Logger.service(`[WORKER] After standard mod filtering: ${filtered.length} scores for user ${data.user.id}`);
+
+        // ORIGINAL BEHAVIOR: Simple mod filtering with fallback logic
+        let filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
+        Logger.service(`[WORKER] After mod filtering: ${filtered.length} scores for user ${data.user.id}`);
+
+        // If no mods specified and we have very few results, be more permissive
+        if (params.mods.length === 0 && filtered.length < 20) {
+            Logger.service(`[WORKER] Only ${filtered.length} results with strict mod filtering, trying permissive mode`);
+            const permissiveFiltered = filterByMods(algorithmResult.results, params.mods, true);
+            if (permissiveFiltered.length > filtered.length) {
+                filtered = permissiveFiltered;
+                Logger.service(`[WORKER] Using permissive mod filtering: ${filtered.length} scores`);
+            }
         }
+
         await metricsCollector.recordStepDuration(data.event.id, 'filter_by_mods');
-        
+
         Logger.service(`[WORKER] Before filterOutTop100: ${filtered.length} scores`);
         filtered = filterOutTop100(filtered, top100Osu.table);
         Logger.service(`[WORKER] After filterOutTop100: ${filtered.length} scores`);
-        await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
-        // Progressive fallback: start with preferred mods, then expand if needed
-        // Only do fallback if user didn't specify mods (params.modHierarchy exists)
-        if (filtered.length < 10 && params.modHierarchy) {
-            Logger.service(`[WORKER] Only ${filtered.length} results after filtering for user ${data.user.id}, trying progressive fallback`);
+        // Progressive fallback if we have very few results after all filtering
+        if (filtered.length < 10) {
+            Logger.service(`[WORKER] Only ${filtered.length} results after all filtering, trying progressive fallback`);
 
-            // Try with primary mods first
-            const primaryModsFiltered = filterByMods(algorithmResult.results, params.modHierarchy.primaryMods, params.allowOtherMods);
-            const primaryModsFilteredOut = filterOutTop100(primaryModsFiltered, top100Osu.table);
-            Logger.service(`[WORKER] After primary mods fallback: ${primaryModsFilteredOut.length} scores`);
+            // Try with more permissive mod filtering
+            let fallbackFiltered = filterByMods(algorithmResult.results, params.mods, true);
+            fallbackFiltered = filterOutTop100(fallbackFiltered, top100Osu.table);
 
-            if (primaryModsFilteredOut.length > filtered.length) {
-                filtered = primaryModsFilteredOut;
-                Logger.service(`[WORKER] Using primary mods fallback (${filtered.length} scores)`);
-            } else {
-                // Try with no mods
-                const noModsFiltered = filterByMods(algorithmResult.results, [], params.allowOtherMods);
-                const noModsFilteredOut = filterOutTop100(noModsFiltered, top100Osu.table);
-                Logger.service(`[WORKER] After no mods fallback: ${noModsFilteredOut.length} scores`);
+            if (fallbackFiltered.length > filtered.length) {
+                filtered = fallbackFiltered;
+                Logger.service(`[WORKER] Using permissive fallback: ${filtered.length} scores`);
+            }
 
-                if (noModsFilteredOut.length > filtered.length) {
-                    filtered = noModsFilteredOut;
-                    Logger.service(`[WORKER] Using no mods fallback (${filtered.length} scores)`);
-                } else if (filtered.length === 0) {
-                    // If still nothing, try with any mods (allowOtherMods = true)
-                    const anyModsFiltered = filterByMods(algorithmResult.results, params.mods, true);
-                    filtered = filterOutTop100(anyModsFiltered, top100Osu.table);
-                    Logger.service(`[WORKER] After any mods fallback: ${filtered.length} scores`);
+            // If still not enough, try with any mods
+            if (filtered.length < 5) {
+                Logger.service(`[WORKER] Still only ${filtered.length} results, trying any mods fallback`);
+                let anyModsFiltered = algorithmResult.results; // No mod filtering at all
+                anyModsFiltered = filterOutTop100(anyModsFiltered, top100Osu.table);
+
+                if (anyModsFiltered.length > filtered.length) {
+                    filtered = anyModsFiltered;
+                    Logger.service(`[WORKER] Using any mods fallback: ${filtered.length} scores`);
                 }
             }
+
+            // COMMENTED: Alternative algorithm fallback - causing issues
+            /*
+            // If still very few results, try alternative algorithms
+            if (filtered.length < 3) {
+                Logger.service(`[WORKER] Very few results (${filtered.length}), trying alternative algorithms`);
+                
+                try {
+                    // Try with a more aggressive algorithm
+                    const alternativeResult = await algorithmManager.executeAlgorithmStrategy({
+                        userPP: data.user.pp,
+                        top100OsuTr: top100Osu.tr,
+                        eventId: data.event.id,
+                        sum,
+                        algorithm: 'Aggressive' // Force aggressive algorithm
+                    });
+                    
+                    if (alternativeResult.results && alternativeResult.results.length > 0) {
+                        Logger.service(`[WORKER] Alternative algorithm found ${alternativeResult.results.length} results`);
+                        
+                        // Apply same filtering to alternative results
+                        let altFiltered = filterByMods(alternativeResult.results, params.mods, true);
+                        altFiltered = filterOutTop100(altFiltered, top100Osu.table);
+                        
+                        if (altFiltered.length > filtered.length) {
+                            filtered = altFiltered;
+                            Logger.service(`[WORKER] Using alternative algorithm results: ${filtered.length} scores`);
+                        }
+                    }
+                } catch (error) {
+                    Logger.errorCatch('Alternative algorithm failed', error);
+                    Logger.service(`[WORKER] Alternative algorithm failed, keeping current ${filtered.length} results`);
+                }
+            }
+            */
         }
+        await metricsCollector.recordStepDuration(data.event.id, 'filter_out_top_100');
 
         if (algorithmResult.relaxedCriteria) {
             filtered = filtered.filter(score => score.precision < 10).sort((a, b) => b.precision - a.precision);
@@ -400,7 +365,8 @@ process.on('message', async (data) => {
         }
 
         const ppTarget = params.pp !== null ? params.pp : targetPP;
-        const selected = pickClosestToTargetPP(sortList, ppTarget);
+        const selected = pickClosestToTargetPPWithDistribution(sortList, ppTarget, distributionManager);
+
         await metricsCollector.recordStepDuration(data.event.id, 'pick_closest_to_target_pp');
 
         if (!selected) {

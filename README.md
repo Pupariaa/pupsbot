@@ -33,6 +33,16 @@ The bot uses **multiple algorithms** to calculate optimal PP ranges, with an int
 
 ---
 
+## Latest Updates (v2.3.2)
+
+### What's New
+- **Better Suggestions**: Improved algorithm for finding beatmaps you haven't played yet
+- **Faster Performance**: Optimized system for quicker response times
+- **More Reliable**: Enhanced error handling and connection stability
+- **Smarter Selection**: Better variety in beatmap recommendations
+
+---
+
 ## How It Works
 
 1. **You send a private message on osu! to the bot account `Puparia`.**
@@ -351,7 +361,8 @@ pupsbot/
 │   ├── Commands.js    # Command dispatcher
 │   ├── RedisStore.js  # Redis cache management
 │   ├── SQL.js         # Database operations
-│   └── UserRateLimiter.js  # User-specific rate limiting
+│   ├── UserRateLimiter.js  # User-specific rate limiting
+│   └── DistributionManager.js  # Beatmap distribution tracking
 ├── models/            # Sequelize DB models
 ├── workers/           # Background processors
 │   └── osu.js         # Main recommendation worker
@@ -360,10 +371,15 @@ pupsbot/
 │   │   ├── analyzeUserMods.js
 │   │   ├── analyzeUserPreferences.js
 │   │   ├── modsToBitwise.js
-│   │   └── PPCalculator.js
+│   │   ├── PPCalculator.js
+│   │   ├── PreferencesScorer.js
+│   │   └── ScoreFilters.js
 │   ├── Logger.js      # Logging system with rotation
 │   ├── generateId.js
 │   └── functions.js
+├── scripts/           # Utility scripts
+│   └── lua/           # Redis Lua scripts
+│       └── findScoresByPPRange.lua
 └── index.js           # Main bot entry point
 ```
 

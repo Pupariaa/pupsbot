@@ -17,22 +17,21 @@ for _, id in ipairs(ids) do
     local bpm = tonumber(redis.call('HGET', id, 'bpm') or "0")
 
     if mode == 'osu' then
-        if precision <= 3 then
-            local bpmMatch = true
-            if bpmFilter ~= "none" then
-                local targetBpm = tonumber(bpmFilter)
-                bpmMatch = math.abs(bpm - targetBpm) <= bpmMargin
-            end
+        -- REMOVED: precision filtering - let the worker handle this
+        local bpmMatch = true
+        if bpmFilter ~= "none" then
+            local targetBpm = tonumber(bpmFilter)
+            bpmMatch = math.abs(bpm - targetBpm) <= bpmMargin
+        end
 
-            if bpmMatch then
-                if modFilter == "any" then
+        if bpmMatch then
+            if modFilter == "any" then
+                table.insert(result, id)
+                count = count + 1
+            else
+                if mods ~= "0" and mods ~= false and mods ~= "" then
                     table.insert(result, id)
                     count = count + 1
-                else
-                    if mods ~= "0" and mods ~= false and mods ~= "" then
-                        table.insert(result, id)
-                        count = count + 1
-                    end
                 end
             end
         end

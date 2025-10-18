@@ -1,7 +1,7 @@
 {
   "name": "pupsbot",
-  "version": "2.3.1",
-  "date": "2025-10-10",
+  "version": "2.3.2",
+  "date": "2025-17-10",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

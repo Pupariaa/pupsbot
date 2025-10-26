@@ -99,7 +99,7 @@ class OsuApiV2 {
             await metricsCollector.close();
         }
     }
-    async getUser(user, mode = 'osu') {
+    async getUser(user, mode = 'osu', forceType = null) {
         const startTime = Date.now();
         const performe = new RedisStore();
         const metricsCollector = new MetricsCollector();
@@ -118,7 +118,17 @@ class OsuApiV2 {
                     locale: cachedProfile.locale
                 };
             }
-            const endpoint = `/users/${encodeURIComponent(user)}/${mode}`;
+            let userParam = user;
+
+            if (forceType === 'username') {
+                userParam = `@${user}`;
+            } else if (forceType === 'id') {
+                userParam = user;
+            } else {
+                const isNumericUsername = /^\d+$/.test(user);
+                userParam = isNumericUsername ? `@${user}` : user;
+            }
+            const endpoint = `/users/${encodeURIComponent(userParam)}/${mode}`;
             const userData = await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSER_V2');
             const profileData = {
                 id: userData.id,

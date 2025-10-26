@@ -23,10 +23,10 @@ class OsuApiClient {
         }
     }
 
-    async getUser(user, mode = 'osu') {
+    async getUser(user, mode = 'osu', forceType = null) {
         try {
             const response = await this.client.get(`/user/${encodeURIComponent(user)}`, {
-                params: { mode }
+                params: { mode, forceType }
             });
 
             if (!response.data.success) {

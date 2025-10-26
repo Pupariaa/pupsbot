@@ -47,7 +47,7 @@ class OsuApiManager {
         this.isInitialized = false;
     }
 
-    async getUser(user, mode = 'osu') {
+    async getUser(user, mode = 'osu', forceType = null) {
         await this.init();
 
         const startTime = Date.now();
@@ -59,7 +59,7 @@ class OsuApiManager {
                 const duration = Date.now() - startTime;
                 await this.metrics.recordServicePerformance('api', 'getUser', duration, 'redis');
 
-                this.refreshUserInBackground(user, mode).catch(error => {
+                this.refreshUserInBackground(user, mode, forceType).catch(error => {
                     Logger.errorCatch('OsuApiManager', `Background refresh failed for ${user}: ${error.message}`);
                 });
 
@@ -68,7 +68,7 @@ class OsuApiManager {
 
             const userData = await this.rateLimiter.executeRequest(async () => {
 
-                return await this.v2.getUser(user, mode);
+                return await this.v2.getUser(user, mode, forceType);
             });
 
             const standardizedData = this.standardizeUserData(userData, mode);
@@ -90,11 +90,11 @@ class OsuApiManager {
         }
     }
 
-    async refreshUserInBackground(user, mode = 'osu') {
+    async refreshUserInBackground(user, mode = 'osu', forceType = null) {
         try {
 
             const userData = await this.rateLimiter.executeRequest(async () => {
-                return await this.v2.getUser(user, mode);
+                return await this.v2.getUser(user, mode, forceType);
             });
 
             const standardizedData = this.standardizeUserData(userData, mode);

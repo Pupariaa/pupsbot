@@ -354,7 +354,7 @@ global.userRequest = [];
 
                 let user = null;
                 try {
-                    user = await global.osuApiClient.getUser(event.nick);
+                    user = await global.osuApiClient.getUser(event.nick, "osu", "username");
                 } catch (error) {
                     Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
                 }

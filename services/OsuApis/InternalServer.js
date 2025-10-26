@@ -51,9 +51,9 @@ class OsuApiInternalServer {
         this.app.get('/user/:user', async (req, res) => {
             try {
                 const { user } = req.params;
-                const { mode = 'osu' } = req.query;
+                const { mode = 'osu', forceType = null } = req.query;
 
-                const userData = await this.apiManager.getUser(user, mode);
+                const userData = await this.apiManager.getUser(user, mode, forceType);
                 res.json({
                     success: true,
                     data: userData

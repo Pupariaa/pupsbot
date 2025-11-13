@@ -19,6 +19,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@influxdata/influxdb-client": "^1.35.0",
     "@rian8337/osu-base": "^3.3.0",
     "@rian8337/osu-difficulty-calculator": "^3.3.2",
     "axios": "^1.12.2",

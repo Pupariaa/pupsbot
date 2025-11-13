@@ -153,6 +153,7 @@ class Thread2Database {
 
             const duration = Date.now() - startTime;
             await metricsCollector.recordServicePerformance('db', 'saveCommandHistory', duration);
+            metricsCollector.writeCommandLog(commandId, input, response, userId, username, success, durationMs, locale);
 
         } catch (error) {
             Logger.errorCatch('DB.SAVE_HISTORY', error);

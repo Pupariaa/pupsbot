@@ -1,3 +1,4 @@
+require('dotenv').config();
 process.env.TZ = 'UTC+2';
 
 const OsuIRCClient = require("./services/IRC");

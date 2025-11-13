@@ -12,3 +12,4 @@ MONITORING_README.md
 /logs
 CHANGELOG*.md
 *.json
+METRICS_README.md

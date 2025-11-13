@@ -1,4 +1,5 @@
 const { createClient } = require('redis');
+const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
 const notifier = new Notifier();
@@ -18,6 +19,29 @@ class MetricsCollector {
             password: process.env.REDIS_METRICS_PASSWORD || process.env.REDIS_PASSWORD || undefined,
             database: parseInt(process.env.REDIS_METRICS_DB || process.env.REDIS_DB || '0', 10)
         });
+
+        this._influxClient = null;
+        this._influxWriteApi = null;
+        this._influxOrg = process.env.INFLUX_ORG || '';
+        this._influxBucket = process.env.INFLUX_BUCKET || 'metrics';
+        const rawToken = process.env.INFLUX_TOKEN || '';
+        this._influxToken = rawToken.trim().replace(/^["']|["']$/g, '');
+        this._influxUrl = process.env.INFLUX_URL || '';
+
+        if (rawToken && !this._influxToken) {
+            Logger.service(`WARNING: INFLUX_TOKEN was set but is empty after processing. Raw length: ${rawToken.length}`);
+        }
+
+        this._influxEnabled = false;
+        if (this._influxUrl && this._influxToken && this._influxOrg) {
+            this._influxEnabled = true;
+        } else {
+            const missing = [];
+            if (!this._influxUrl) missing.push('INFLUX_URL');
+            if (!this._influxToken) missing.push('INFLUX_TOKEN');
+            if (!this._influxOrg) missing.push('INFLUX_ORG');
+            Logger.service(`InfluxDB: Disabled - missing: ${missing.join(', ')}`);
+        }
 
         this._setupEventHandlers();
     }
@@ -53,6 +77,29 @@ class MetricsCollector {
             Logger.errorCatch('METRICS_COLLECTOR.INIT', error);
             await notifier.send(`MetricsCollector Redis init error: ${error.message}`, 'METRICS_REDIS.INIT');
             throw error;
+        }
+
+        if (this._influxEnabled) {
+            try {
+                const tokenLength = this._influxToken ? this._influxToken.length : 0;
+                const tokenEndsWithEquals = this._influxToken ? this._influxToken.endsWith('==') : false;
+                Logger.service(`InfluxDB: Initializing with URL=${this._influxUrl}, Org=${this._influxOrg}, Bucket=${this._influxBucket}, TokenLength=${tokenLength}, EndsWith===${tokenEndsWithEquals}`);
+
+                if (!this._influxToken || this._influxToken.length < 10) {
+                    Logger.errorCatch('METRICS_COLLECTOR.INFLUX_INIT', new Error(`Token seems invalid or too short. Length: ${tokenLength}`));
+                    this._influxEnabled = false;
+                    return;
+                }
+
+                this._influxClient = new InfluxDB({ url: this._influxUrl, token: this._influxToken });
+                this._influxWriteApi = this._influxClient.getWriteApi(this._influxOrg, this._influxBucket, 'ms');
+                this._influxWriteApi.useDefaultTags({ source: 'pupsbot' });
+
+                Logger.service('InfluxDB: Successfully initialized');
+            } catch (error) {
+                Logger.errorCatch('METRICS_COLLECTOR.INFLUX_INIT', error);
+                this._influxEnabled = false;
+            }
         }
     }
 
@@ -90,6 +137,14 @@ class MetricsCollector {
                 score: timestamp,
                 value: commandId.toString()
             });
+
+            this._writeToInflux('command_created', {
+                commandId: commandId.toString(),
+                commandName: commandName.toString(),
+                userId: userId?.toString() || '',
+                status: 'pending',
+                timestamp: timestamp
+            }, additionalData);
 
             return timestamp;
         } catch (error) {
@@ -143,6 +198,11 @@ class MetricsCollector {
 
             await this._redis.hSet(key, updateData);
 
+            this._writeToInflux('command_durations_updated', {
+                commandId: commandId.toString(),
+                totalDuration: totalDuration
+            }, durations);
+
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.UPDATE_DURATIONS', error);
             throw error;
@@ -181,6 +241,13 @@ class MetricsCollector {
             }
 
             await this._redis.hSet(key, updateData);
+
+            this._writeToInflux('command_finalized', {
+                commandId: commandId.toString(),
+                status: status.toString(),
+                endTime: endTime,
+                totalDuration: parseFloat(updateData.totalDuration) || 0
+            });
 
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.FINALIZE', error);
@@ -398,6 +465,12 @@ class MetricsCollector {
                 [`timestamp_${stepName}`]: currentTime.toString()
             });
 
+            this._writeToInflux('step_duration_recorded', {
+                commandId: commandId.toString(),
+                stepName: stepName,
+                duration: duration
+            });
+
             const allData = await this._redis.hGetAll(key);
             let totalDuration = 0;
             for (const [key, value] of Object.entries(allData)) {
@@ -420,6 +493,11 @@ class MetricsCollector {
             const key = `metrics:command:${commandId}`;
 
             await this._redis.hSet(key, 'result', result.toString());
+
+            this._writeToInflux('command_result_updated', {
+                commandId: commandId.toString(),
+                result: result.toString()
+            });
 
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.UPDATE_RESULT', error);
@@ -470,6 +548,12 @@ class MetricsCollector {
                 [`timestamp_db_${operation}`]: currentTime.toString()
             });
 
+            this._writeToInflux('database_timer', {
+                commandId: commandId.toString(),
+                operation: operation,
+                duration: duration
+            });
+
             const allData = await this._redis.hGetAll(key);
             let totalDuration = 0;
             for (const [key, value] of Object.entries(allData)) {
@@ -515,6 +599,12 @@ class MetricsCollector {
             await this._redis.hSet(key, {
                 [`redis_${operation}`]: duration.toString(),
                 [`timestamp_redis_${operation}`]: currentTime.toString()
+            });
+
+            this._writeToInflux('redis_timer', {
+                commandId: commandId.toString(),
+                operation: operation,
+                duration: duration
             });
 
             const allData = await this._redis.hGetAll(key);
@@ -564,6 +654,13 @@ class MetricsCollector {
                 [`timestamp_api_${version}_${operation}`]: currentTime.toString()
             });
 
+            this._writeToInflux('api_timer', {
+                commandId: commandId.toString(),
+                operation: operation,
+                version: version,
+                duration: duration
+            });
+
             const allData = await this._redis.hGetAll(key);
             let totalDuration = 0;
             for (const [key, value] of Object.entries(allData)) {
@@ -591,6 +688,13 @@ class MetricsCollector {
             });
             this._redis.expire(key, 86400 * 7).catch(error => {
                 Logger.errorCatch('MetricsCollector', `Failed to set expiry for service performance: ${error.message}`);
+            });
+
+            this._writeToInflux('service_performance', {
+                serviceType: serviceType,
+                operation: operationKey,
+                duration: duration,
+                version: version || ''
             });
 
         } catch (error) {
@@ -708,6 +812,67 @@ class MetricsCollector {
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.CLOSE', error);
         }
+
+        if (this._influxWriteApi) {
+            try {
+                await this._influxWriteApi.close();
+            } catch (error) {
+                Logger.errorCatch('METRICS_COLLECTOR.INFLUX_CLOSE', error);
+            }
+        }
+    }
+
+    _writeToInflux(measurement, fields, tags = {}) {
+        if (!this._influxEnabled || !this._influxWriteApi) {
+            return;
+        }
+
+        try {
+            const point = new Point(measurement);
+
+            for (const [key, value] of Object.entries(fields)) {
+                if (typeof value === 'number') {
+                    point.floatField(key, value);
+                } else if (typeof value === 'boolean') {
+                    point.booleanField(key, value);
+                } else {
+                    point.stringField(key, value.toString());
+                }
+            }
+
+            for (const [key, value] of Object.entries(tags)) {
+                if (value !== null && value !== undefined) {
+                    point.tag(key, value.toString());
+                }
+            }
+
+            this._influxWriteApi.writePoint(point);
+        } catch (error) {
+            Logger.errorCatch('METRICS_COLLECTOR.INFLUX_WRITE', error);
+        }
+    }
+
+    async flushInflux() {
+        if (this._influxWriteApi) {
+            try {
+                await this._influxWriteApi.flush();
+            } catch (error) {
+                Logger.errorCatch('METRICS_COLLECTOR.INFLUX_FLUSH', error);
+            }
+        }
+    }
+
+    writeCommandLog(commandId, input, response, userId, username, success, durationMs, locale) {
+        this._writeToInflux('command_log', {
+            commandId: commandId.toString(),
+            input: input.toString(),
+            response: response.toString(),
+            userId: userId?.toString() || '',
+            username: username?.toString() || '',
+            success: success ? 1 : 0,
+            durationMs: durationMs || 0,
+            locale: locale?.toString() || ''
+        });
     }
 
     /**

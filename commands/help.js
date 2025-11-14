@@ -31,7 +31,6 @@ module.exports = {
 
             const commands = {
                 osu: '!o - ' + (isFR ? 'Beatmap suggestion osu!' : 'osu! beatmap suggestion'),
-                mania: '!m - ' + (isFR ? 'Commandes osu!mania' : 'osu!mania commands'),
                 info: '!info - ' + (isFR ? 'Informations du bot' : 'Bot information'),
                 support: '!support - ' + (isFR ? 'Supporter le projet' : 'Support the project'),
                 help: '!help - ' + (isFR ? 'Cette aide' : 'This help'),
@@ -41,9 +40,9 @@ module.exports = {
             const commandList = Object.values(commands).join(' | ');
 
             const responseMessage = isFR
-                ? `🤖 Commandes disponibles: ${commandList} | Utilise /np avec une beatmap pour les gains PP | Nouveaux filtres: pp:150 bpm:180 | Exemple: !o HD pp:200 bpm:160
+                ? `🤖 Commandes disponibles: ${commandList} | Utilise /np avec une beatmap pour les gains PP | Nouveaux filtres: pp:150, bpm:180, FC, ACC>99, duree>1:00 | Exemple: !o HD ACC>99 duree>1:00 FC
                 Si jamais tu as des difficulté tu peux rejoindre ce serveur [https://discord.gg/bJQVPzy2u6 Discord]`
-                : `🤖 Available commands: ${commandList} | Use /np with a beatmap for PP gains | New filters: pp:150 bpm:180 | Example: !o HD pp:200 bpm:160
+                : `🤖 Available commands: ${commandList} | Use /np with a beatmap for PP gains | New filters: pp:150 bpm:180 FC ACC>99 length>1:00 | Example: !o HD ACC>99 length>1:00 FC
                 If you have any issues, you can join this server [https://discord.gg/bJQVPzy2u6 Discord]`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);

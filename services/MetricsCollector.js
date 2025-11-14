@@ -83,8 +83,6 @@ class MetricsCollector {
             try {
                 const tokenLength = this._influxToken ? this._influxToken.length : 0;
                 const tokenEndsWithEquals = this._influxToken ? this._influxToken.endsWith('==') : false;
-                Logger.service(`InfluxDB: Initializing with URL=${this._influxUrl}, Org=${this._influxOrg}, Bucket=${this._influxBucket}, TokenLength=${tokenLength}, EndsWith===${tokenEndsWithEquals}`);
-
                 if (!this._influxToken || this._influxToken.length < 10) {
                     Logger.errorCatch('METRICS_COLLECTOR.INFLUX_INIT', new Error(`Token seems invalid or too short. Length: ${tokenLength}`));
                     this._influxEnabled = false;
@@ -94,8 +92,6 @@ class MetricsCollector {
                 this._influxClient = new InfluxDB({ url: this._influxUrl, token: this._influxToken });
                 this._influxWriteApi = this._influxClient.getWriteApi(this._influxOrg, this._influxBucket, 'ms');
                 this._influxWriteApi.useDefaultTags({ source: 'pupsbot' });
-
-                Logger.service('InfluxDB: Successfully initialized');
             } catch (error) {
                 Logger.errorCatch('METRICS_COLLECTOR.INFLUX_INIT', error);
                 this._influxEnabled = false;

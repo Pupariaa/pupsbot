@@ -3,6 +3,7 @@
  */
 
 const modsToBitwise = require('./modsToBitwise');
+const DT_BIT = 64;
 
 function filterOutTop100(results, beatmapIdSet) {
     if (beatmapIdSet instanceof Set) {
@@ -143,11 +144,136 @@ function pickClosestToTargetPP(filtered, targetPP) {
     });
 }
 
+function getMissCount(score) {
+    const candidates = [
+        score.miss,
+        score.count_miss,
+        score.statistics_count_miss,
+        score.statistics?.count_miss,
+        score.stats?.count_miss
+    ];
+
+    for (const value of candidates) {
+        if (value === undefined || value === null) continue;
+        const num = typeof value === 'string' ? parseInt(value, 10) : Number(value);
+        if (!Number.isNaN(num)) {
+            return num;
+        }
+    }
+
+    if (score.perfect === '1' || score.perfect === 1 || score.perfect === true) {
+        return 0;
+    }
+
+    return null;
+}
+
+function filterFCOnly(results) {
+    return results.filter(score => {
+        const missCount = getMissCount(score);
+        return missCount === 0;
+    });
+}
+
+function extractAccuracy(score) {
+    const candidates = [
+        score.accuracy,
+        score.acc,
+        score.Accuracy,
+        score.ACC,
+        score.acc_percent,
+        score.accPercent,
+        score.accuracy_percentage,
+        score.accuracy_percent,
+        score.accPercentages,
+        score.accuraccy // Legacy typo
+    ];
+
+    for (const value of candidates) {
+        if (value === undefined || value === null) continue;
+        const cleaned = typeof value === 'string' ? value.replace('%', '').trim() : value;
+        const num = typeof cleaned === 'string' ? parseFloat(cleaned) : Number(cleaned);
+        if (!Number.isNaN(num)) {
+            return num;
+        }
+    }
+
+    return null;
+}
+
+function filterByAccuracy(results, filter) {
+    if (!filter || filter.value === null || filter.value === undefined) return results;
+    const threshold = parseFloat(filter.value);
+    if (Number.isNaN(threshold)) return results;
+
+    const normalizedThreshold = threshold > 1 ? threshold / 100 : threshold;
+    const operator = filter.operator === '<' ? '<' : '>';
+
+    return results.filter(score => {
+        const accValue = extractAccuracy(score);
+        if (accValue === null) return false;
+
+        const normalizedAcc = accValue > 1 ? accValue / 100 : accValue;
+        return operator === '<'
+            ? normalizedAcc <= normalizedThreshold
+            : normalizedAcc >= normalizedThreshold;
+    });
+}
+
+function getScoreLengthSeconds(score) {
+    const candidates = [
+        score.length,
+        score.total_length,
+        score.beatmap_length,
+        score.duration,
+        score.totalLength
+    ];
+
+    let baseLength = null;
+    for (const value of candidates) {
+        if (value === undefined || value === null) continue;
+        const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+        if (!Number.isNaN(num) && num > 0) {
+            baseLength = num;
+            break;
+        }
+    }
+
+    if (baseLength === null) return null;
+
+    const mods = parseInt(score.mods, 10);
+    if (!Number.isNaN(mods) && (mods & DT_BIT)) {
+        return baseLength / 1.5;
+    }
+
+    return baseLength;
+}
+
+function filterByLength(results, filter) {
+    if (!filter || filter.value === null || filter.value === undefined) return results;
+    const threshold = parseFloat(filter.value);
+    if (Number.isNaN(threshold)) return results;
+    const operator = filter.operator === '<' ? '<' : '>';
+
+    return results.filter(score => {
+        const length = getScoreLengthSeconds(score);
+        if (length === null) return false;
+        return operator === '<'
+            ? length <= threshold
+            : length >= threshold;
+    });
+}
+
 module.exports = {
     filterOutTop100,
     filterByMods,
     // filterByModsWithHierarchy, // COMMENTED: Mod hierarchy system
     pickBestRandomPrecision,
     pickClosestToTargetPP,
-    pickClosestToTargetPPWithDistribution
+    pickClosestToTargetPPWithDistribution,
+    filterFCOnly,
+    filterByAccuracy,
+    filterByLength,
+    getMissCount,
+    getScoreLengthSeconds
 };

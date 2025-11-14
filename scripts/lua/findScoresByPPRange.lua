@@ -15,8 +15,9 @@ for _, id in ipairs(ids) do
     local precision = tonumber(redis.call('HGET', id, 'precision') or "9")
     local mode = redis.call('HGET', id, 'type')
     local bpm = tonumber(redis.call('HGET', id, 'bpm') or "0")
+    local probBan = redis.call('HGET', id, 'user_prob_ban')
 
-    if mode == 'osu' then
+    if mode == 'osu' and probBan ~= 'true' and probBan ~= '1' then
         -- REMOVED: precision filtering - let the worker handle this
         local bpmMatch = true
         if bpmFilter ~= "none" then

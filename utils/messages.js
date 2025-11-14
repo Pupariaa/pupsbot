@@ -6,7 +6,7 @@ async function buildBeatmapMessage(locale, selected, beatmapInfo, targetPP, unkn
     const realSR = await getStarRating(selected, beatmapInfo, osuApiClient);
     const moddedStats = getModdedStats(selected);
     const messageComponents = buildMessageComponents(locale, selected, beatmapInfo, targetPP, realSR, moddedStats);
-    const infoPrefix = buildInfoPrefix(locale, unknownTokens, unsupportedMods);
+    const infoPrefix = buildInfoPrefix(locale, unknownTokens, unsupportedMods, selected?.fallbackReasons || []);
     const messageBody = buildMessageBody(locale, selected, messageComponents, moddedStats);
     const beatmapData = buildBeatmapData(selected, beatmapInfo, realSR, moddedStats);
 
@@ -54,16 +54,19 @@ function buildMessageComponents(locale, selected, beatmapInfo, targetPP, realSR,
     };
 }
 
-function buildInfoPrefix(locale, unknownTokens, unsupportedMods) {
+function buildInfoPrefix(locale, unknownTokens, unsupportedMods, fallbackReasons = []) {
     const hasUnsupported = unsupportedMods?.length > 0;
     const hasUnknown = unknownTokens?.length > 0;
+    const hasFallback = fallbackReasons?.length > 0;
 
-    if (!hasUnsupported && !hasUnknown) return '';
+    if (!hasUnsupported && !hasUnknown && !hasFallback) return '';
 
     if (locale === 'FR') {
-        return buildFrenchInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unknownTokens);
+        return buildFrenchInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unknownTokens) +
+            (hasFallback ? buildFallbackNote('FR', fallbackReasons) : '');
     } else {
-        return buildEnglishInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unknownTokens);
+        return buildEnglishInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unknownTokens) +
+            (hasFallback ? buildFallbackNote('EN', fallbackReasons) : '');
     }
 }
 
@@ -78,7 +81,13 @@ function buildFrenchInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unkn
         parts.push(`${hasUnsupported ? 'et ' : ''}je n\'ai pas reconnu ${unknownTokens.length > 1 ? 'les tokens suivants' : 'le token suivant'} : ${unknownTokens.join(', ')}`);
     }
 
-    return `${parts.join(', ')}. ${hasUnsupported && hasUnknown ? 'Aucun d\'eux' : 'Il' + (hasUnsupported || unknownTokens.length > 1 ? 's' : '')} ne sera pris en compte.\n`;
+    if (parts.length === 0) return '';
+
+    const suffix = hasUnsupported && hasUnknown
+        ? 'Aucun d\'eux ne sera pris en compte.'
+        : `${(hasUnsupported || unknownTokens.length > 1) ? 'Ils' : 'Il'} ne sera pris en compte.`;
+
+    return `${parts.join(', ')}. ${suffix}\n`;
 }
 
 function buildEnglishInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unknownTokens) {
@@ -93,6 +102,26 @@ function buildEnglishInfoPrefix(hasUnsupported, hasUnknown, unsupportedMods, unk
     }
 
     return `${parts.join(', ')}. ${hasUnsupported && hasUnknown ? 'None of them' : (hasUnsupported || unknownTokens.length > 1 ? 'They' : 'It')} won't be taken into account.\n`;
+}
+
+function buildFallbackNote(locale, reasons = []) {
+    if (!reasons || reasons.length === 0) return '';
+    const labels = reasons.map(reason => {
+        switch (reason) {
+            case 'accuracy':
+                return locale === 'FR' ? 'précision' : 'accuracy';
+            case 'fc':
+                return locale === 'FR' ? 'full combo' : 'full combo';
+            case 'length':
+                return locale === 'FR' ? 'durée' : 'length';
+            default:
+                return locale === 'FR' ? 'filtres' : 'filters';
+        }
+    });
+    const joined = labels.join(', ');
+    return locale === 'FR'
+        ? `Aucun résultat avec les filtres stricts (${joined}). Recherche élargie.\n`
+        : `No result matched the strict filters (${joined}). Expanded search.\n`;
 }
 
 function buildMessageBody(locale, selected, { duration, linkScore, linkBeatmap, ppText, stars, stats, target }, { cs, od, hp, ar }) {

@@ -14,3 +14,4 @@ CHANGELOG*.md
 *.json
 METRICS_LIST.md
 start.bat
+retry_scores_problems.log

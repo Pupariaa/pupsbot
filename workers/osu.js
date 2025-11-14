@@ -12,7 +12,7 @@ const computeTargetPP = require('../compute/osu/targetPP');
 const { analyzeUserMods } = require('../utils/osu/analyzeUserMods');
 const analyzeUserPreferences = require('../utils/osu/analyzeUserPreferences');
 const { calculatePreferenceScore } = require('../utils/osu/PreferencesScorer');
-const { filterOutTop100, filterByMods, pickClosestToTargetPP, pickClosestToTargetPPWithDistribution } = require('../utils/osu/ScoreFilters');
+const { filterOutTop100, filterByMods, pickClosestToTargetPP, pickClosestToTargetPPWithDistribution, filterFCOnly, filterByAccuracy, filterByLength, getMissCount } = require('../utils/osu/ScoreFilters');
 // const { filterByModsWithHierarchy } = require('../utils/osu/ScoreFilters'); // COMMENTED: Mod hierarchy system
 const AlgorithmManager = require('../managers/AlgorithmManager');
 const UserPreferencesManager = require('../managers/UserPreferencesManager');
@@ -23,6 +23,14 @@ const notifier = new Notifier();
 const algorithmManager = new AlgorithmManager();
 const userPreferencesManager = new UserPreferencesManager();
 const distributionManager = new DistributionManager();
+
+function formatSecondsLabel(seconds) {
+    if (seconds === null || seconds === undefined) return '?';
+    const total = Math.max(0, Math.round(seconds));
+    const minutes = Math.floor(total / 60);
+    const secs = total % 60;
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
 
 
 async function sendErrorResponse(data, errorCode, message) {
@@ -176,11 +184,16 @@ process.on('message', async (data) => {
 
         Logger.service(`[WORKER] Starting with ${algorithmResult.results.length} total scores for user ${data.user.id}`);
 
-        // ORIGINAL BEHAVIOR: Simple mod filtering with fallback logic
         let filtered = filterByMods(algorithmResult.results, params.mods, params.allowOtherMods);
         Logger.service(`[WORKER] After mod filtering: ${filtered.length} scores for user ${data.user.id}`);
+        const fallbackReasons = [];
+        let fallbackUsed = false;
+        const noteFallbackReason = (reason) => {
+            if (!fallbackReasons.includes(reason)) {
+                fallbackReasons.push(reason);
+            }
+        };
 
-        // If no mods specified and we have very few results, be more permissive
         if (params.mods.length === 0 && filtered.length < 20) {
             Logger.service(`[WORKER] Only ${filtered.length} results with strict mod filtering, trying permissive mode`);
             const permissiveFiltered = filterByMods(algorithmResult.results, params.mods, true);
@@ -196,11 +209,74 @@ process.on('message', async (data) => {
         filtered = filterOutTop100(filtered, top100Osu.table);
         Logger.service(`[WORKER] After filterOutTop100: ${filtered.length} scores`);
 
-        // Progressive fallback if we have very few results after all filtering
+        const accFilter = params.accFilter && params.accFilter.value !== null && params.accFilter.value !== undefined
+            ? params.accFilter
+            : (params.minAcc !== null && params.minAcc !== undefined
+                ? { operator: '>', value: params.minAcc }
+                : null);
+
+        if (accFilter) {
+            const beforeAcc = filtered.length;
+            filtered = filterByAccuracy(filtered, accFilter);
+            Logger.service(`[WORKER] After accuracy filter (${accFilter.operator} ${accFilter.value}%): ${filtered.length} scores (was ${beforeAcc})`);
+            await metricsCollector.recordStepDuration(data.event.id, 'filter_accuracy');
+            if (filtered.length === 0) {
+                noteFallbackReason('accuracy');
+            }
+        }
+
+        const lengthFilter = params.lengthFilter && params.lengthFilter.value !== null && params.lengthFilter.value !== undefined
+            ? params.lengthFilter
+            : (params.minLengthSeconds !== null && params.minLengthSeconds !== undefined
+                ? { operator: '>', value: params.minLengthSeconds }
+                : null);
+
+        if (lengthFilter) {
+            const beforeLength = filtered.length;
+            filtered = filterByLength(filtered, lengthFilter);
+            Logger.service(`[WORKER] After length filter (${lengthFilter.operator} ${formatSecondsLabel(lengthFilter.value)}): ${filtered.length} scores (was ${beforeLength})`);
+            await metricsCollector.recordStepDuration(data.event.id, 'filter_length');
+            if (filtered.length === 0) {
+                noteFallbackReason('length');
+            }
+        }
+        if (params.fcOnly) {
+            const beforeFC = filtered.length;
+            if (filtered.length > 0) {
+                const sample = filtered.slice(0, 10);
+                Logger.service(`[WORKER] Sample scores before FC filter:`);
+                const missCounts = {};
+                sample.forEach((score, idx) => {
+                    const missCount = getMissCount(score);
+                    const label = missCount !== null ? missCount : 'unknown';
+                    missCounts[label] = (missCounts[label] || 0) + 1;
+                    if (idx < 5) {
+                        Logger.service(`[WORKER] Score ${idx}: miss=${label}, beatmap_id=${score.beatmap_id}`);
+                    }
+                });
+                Logger.service(`[WORKER] Miss distribution in sample: ${JSON.stringify(missCounts)}`);
+            }
+            filtered = filterFCOnly(filtered);
+            Logger.service(`[WORKER] After FC filter: ${filtered.length} scores (was ${beforeFC})`);
+            if (filtered.length > 0) {
+                const sample = filtered[0];
+                Logger.service(`[WORKER] Sample FC score: miss=${getMissCount(sample)}, beatmap_id=${sample.beatmap_id}`);
+            } else {
+                Logger.service(`[WORKER] No FC scores found (0 miss).`);
+            }
+            await metricsCollector.recordStepDuration(data.event.id, 'filter_fc');
+            if (filtered.length === 0) {
+                noteFallbackReason('fc');
+            }
+        }
+
         if (filtered.length < 10) {
+            fallbackUsed = true;
+            if (fallbackReasons.length === 0) {
+                noteFallbackReason('general');
+            }
             Logger.service(`[WORKER] Only ${filtered.length} results after all filtering, trying progressive fallback`);
 
-            // Try with more permissive mod filtering
             let fallbackFiltered = filterByMods(algorithmResult.results, params.mods, true);
             fallbackFiltered = filterOutTop100(fallbackFiltered, top100Osu.table);
 
@@ -209,10 +285,9 @@ process.on('message', async (data) => {
                 Logger.service(`[WORKER] Using permissive fallback: ${filtered.length} scores`);
             }
 
-            // If still not enough, try with any mods
-            if (filtered.length < 5) {
+            if (filtered.length < 5 && !params.fcOnly) {
                 Logger.service(`[WORKER] Still only ${filtered.length} results, trying any mods fallback`);
-                let anyModsFiltered = algorithmResult.results; // No mod filtering at all
+                let anyModsFiltered = algorithmResult.results;
                 anyModsFiltered = filterOutTop100(anyModsFiltered, top100Osu.table);
 
                 if (anyModsFiltered.length > filtered.length) {
@@ -270,7 +345,6 @@ process.on('message', async (data) => {
             const list = [];
             const chunkSize = 10;
 
-            // Process scores in chunks for better performance
             const maxScores = filtered.length;
 
             for (let i = 0; i < maxScores; i += chunkSize) {
@@ -315,7 +389,16 @@ process.on('message', async (data) => {
                                 }
                             }
 
-                            return shouldInclude ? score : null;
+                            if (!shouldInclude) return null;
+
+                            if (params.fcOnly) {
+                                const missCount = getMissCount(score);
+                                if (missCount !== 0) {
+                                    return null;
+                                }
+                            }
+
+                            return score;
                         } catch (error) {
                             Logger.errorCatch('Worker', `Failed to process score ${mapId}: ${error.message}`);
                             return null;
@@ -327,7 +410,6 @@ process.on('message', async (data) => {
                     if (result) list.push(result);
                 });
 
-                // Continue processing all scores, don't stop early
             }
 
             return list;
@@ -398,6 +480,12 @@ process.on('message', async (data) => {
         if (!beatmap) {
             await sendErrorResponse(data, 'ERR_BEATMAP_NOT_FOUND');
             return;
+        }
+
+        if (fallbackUsed) {
+            selected.fallbackReasons = fallbackReasons;
+        } else {
+            selected.fallbackReasons = [];
         }
 
         const response = await SendBeatmapMessage(data.user.locale, selected, beatmap, targetPP, params.unknownTokens, params.unsupportedMods, osuApi);

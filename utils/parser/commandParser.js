@@ -45,12 +45,59 @@ function parseCommandParameters(message, gamemode, userPreferences = null) {
     const unknownTokens = [];
     let bpm = null;
     let pp = null;
+    let accFilter = null;
+    let pendingAccOperator = '>';
+    let awaitingAccValue = false;
+    let lengthFilter = null;
+    let pendingLengthOperator = '>';
+    let awaitingLengthValue = false;
     let precision = null;
+    let fcOnly = false;
 
-    const tokens = input.replace(/[^\w:+]/g, ' ').split(/\s+/).filter(Boolean);
+    const tokens = input.replace(/[^\w:+<>]/g, ' ').split(/\s+/).filter(Boolean);
+
+    const applyAccFilter = (operator, value) => {
+        if (value === null || value === undefined) return;
+        const numericValue = typeof value === 'number' ? value : parseFloat(value);
+        if (Number.isNaN(numericValue)) return;
+        accFilter = {
+            operator: operator === '<' ? '<' : '>',
+            value: numericValue
+        };
+    };
+
+    const applyLengthFilter = (operator, value) => {
+        if (value === null || value === undefined) return;
+        const numericValue = typeof value === 'number' ? value : parseFloat(value);
+        if (Number.isNaN(numericValue)) return;
+        lengthFilter = {
+            operator: operator === '<' ? '<' : '>',
+            value: numericValue
+        };
+    };
 
     for (const token of tokens) {
         if (token === '+') continue;
+
+        if (awaitingAccValue) {
+            const numeric = parseFloat(token.replace(',', '.'));
+            if (!Number.isNaN(numeric)) {
+                applyAccFilter(pendingAccOperator, numeric);
+                awaitingAccValue = false;
+                continue;
+            }
+            awaitingAccValue = false;
+        }
+
+        if (awaitingLengthValue) {
+            const seconds = parseLengthToSeconds(token);
+            if (seconds !== null) {
+                applyLengthFilter(pendingLengthOperator, seconds);
+                awaitingLengthValue = false;
+                continue;
+            }
+            awaitingLengthValue = false;
+        }
 
         const precisionMatch = token.match(/^PRECIS[:]?(\d)$/);
         if (precisionMatch) {
@@ -67,6 +114,43 @@ function parseCommandParameters(message, gamemode, userPreferences = null) {
         const ppMatch = token.match(/^PP[:]?(\d+)$/);
         if (ppMatch) {
             pp = parseInt(ppMatch[1], 10);
+            continue;
+        }
+
+        const accMatch = token.match(/^ACC([<>])?[:]?(\d+(?:[.,]\d+)?)?$/);
+        if (accMatch) {
+            const operator = accMatch[1] || '>';
+            if (accMatch[2]) {
+                applyAccFilter(operator, parseFloat(accMatch[2].replace(',', '.')));
+            } else {
+                pendingAccOperator = operator;
+                awaitingAccValue = true;
+            }
+            continue;
+        }
+
+        const lengthMatch = token.match(/^LENGTH([<>])?[:]?(.+)?$/);
+        const dureeMatch = token.match(/^DUREE([<>])?[:]?(.+)?$/);
+
+        if (lengthMatch || dureeMatch) {
+            const match = lengthMatch || dureeMatch;
+            const operator = match[1] || '>';
+            const valuePart = match[2]?.trim();
+            if (valuePart) {
+                const seconds = parseLengthToSeconds(valuePart);
+                if (seconds !== null) {
+                    applyLengthFilter(operator, seconds);
+                }
+            } else {
+                pendingLengthOperator = operator;
+                awaitingLengthValue = true;
+            }
+            continue;
+        }
+
+
+        if (token === 'FC' || token === 'FULLCOMBO' || token === 'MISS') {
+            fcOnly = true;
             continue;
         }
 
@@ -161,6 +245,9 @@ function parseCommandParameters(message, gamemode, userPreferences = null) {
         finalParameters = paramParts.join(' ');
     }
 
+    const finalAccFilter = accFilter && accFilter.value !== null && accFilter.value !== undefined ? accFilter : null;
+    const finalLengthFilter = lengthFilter && lengthFilter.value !== null && lengthFilter.value !== undefined ? lengthFilter : null;
+
     return {
         allowOtherMods: finalAllowOtherMods,
         mods: finalMods,
@@ -170,8 +257,53 @@ function parseCommandParameters(message, gamemode, userPreferences = null) {
         pp: finalPp,
         unsupportedMods,
         unknownTokens,
-        algorithm: finalAlgorithm
+        algorithm: finalAlgorithm,
+        fcOnly: fcOnly,
+        minAcc: finalAccFilter ? finalAccFilter.value : null,
+        minLengthSeconds: finalLengthFilter ? finalLengthFilter.value : null,
+        accFilter: finalAccFilter,
+        lengthFilter: finalLengthFilter
     };
 }
 
 module.exports = parseCommandParameters;
+
+function parseLengthToSeconds(value) {
+    if (!value) return null;
+    let str = value.trim().toUpperCase();
+    str = str.replace(/,/g, '.');
+
+    if (str.includes(':')) {
+        const parts = str.split(':');
+        if (parts.length === 2) {
+            const minutes = parseInt(parts[0], 10);
+            const seconds = parseFloat(parts[1]);
+            if (!Number.isNaN(minutes) && !Number.isNaN(seconds)) {
+                return minutes * 60 + seconds;
+            }
+        }
+    }
+
+    const minuteMatch = str.match(/^(\d+(?:\.\d+)?)(?:\s*)(M|MIN|MINS|MINUTES)$/);
+    if (minuteMatch) {
+        const minutes = parseFloat(minuteMatch[1]);
+        if (!Number.isNaN(minutes)) {
+            return minutes * 60;
+        }
+    }
+
+    const secondMatch = str.match(/^(\d+(?:\.\d+)?)(?:\s*)(S|SEC|SECS|SECONDS)$/);
+    if (secondMatch) {
+        const seconds = parseFloat(secondMatch[1]);
+        if (!Number.isNaN(seconds)) {
+            return seconds;
+        }
+    }
+
+    const numeric = parseFloat(str);
+    if (!Number.isNaN(numeric)) {
+        return numeric;
+    }
+
+    return null;
+}

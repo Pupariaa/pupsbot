@@ -34,7 +34,8 @@ module.exports = {
                 info: '!info - ' + (isFR ? 'Informations du bot' : 'Bot information'),
                 support: '!support - ' + (isFR ? 'Supporter le projet' : 'Support the project'),
                 help: '!help - ' + (isFR ? 'Cette aide' : 'This help'),
-                version: '!version - ' + (isFR ? 'Version du bot' : 'Bot version')
+                version: '!version - ' + (isFR ? 'Version du bot' : 'Bot version'),
+                fb: '!fb - ' + (isFR ? 'Feedback' : 'Feedback')
             };
 
             const commandList = Object.values(commands).join(' | ');

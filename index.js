@@ -359,6 +359,8 @@ global.userRequest = [];
                 } catch (error) {
                     Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
                 }
+                // await queue.addToQueue(event.nick, 'Cloudflare is currently experiencing disruptions. Pupsbot is temporarily unavailable. [https://status.cloudflare.com/ Cloudflare Status]', true, generateId(), true);
+
 
                 await commandManager.handleMessage(event, queue, lastRequests, user);
             }

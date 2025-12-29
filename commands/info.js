@@ -25,7 +25,7 @@ module.exports = {
                 : `Pupsbot V2 (Formerly Puparia V1) is a bot that gives you perfect beatmaps to earn PP. They are chosen from maps never played or absent from your top 100, but present in the top 100 of other players close to your level. More than 50M of scores are stored in Redis (ultra fast), with HD/HR/DT/NF/EZ compatibility, and an algorithm that calculates your target PP to maximize your gains. The /np remains available to estimate your PP earnings with or without mods. To support the project, here is [https://ko-fi.com/bellafiora le lien kofi] Thanks-u ♥`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale, event.from);
             await metricsCollector.updateCommandResult(event.id, 'success');
         } catch (err) {
             Logger.errorCatch('Command::info', err);

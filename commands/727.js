@@ -25,7 +25,7 @@ module.exports = {
                 : `I found this beatmap that you definitely shouldn’t play: [https://osu.ppy.sh/b/58127 xi – Blue Zenith] (FOUR DIMENSIONS) | Estimated PP gain: 727pp (don’t choke like history) | Duration: 2:21 | 7.84 ★ | AR10 CS4 OD10 HP6 | Your target rankup according to osu!: pain.`;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
-            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale, event.from);
             await metricsCollector.updateCommandResult(event.id, 'success');
         } catch (err) {
             Logger.errorCatch('Command::727', err);

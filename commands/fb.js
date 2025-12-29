@@ -34,7 +34,7 @@ module.exports = {
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);
             await db.saveFeedback(event.id, result, u.id, event.nick, u.locale);
-            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale);
+            await db.saveCommandHistory(event.id, event.message, responseMessage, u.id, event.nick, true, 0, u.locale, event.from);
             await metricsCollector.updateCommandResult(event.id, 'success');
         } catch (e) {
             Logger.errorCatch('fb', e);

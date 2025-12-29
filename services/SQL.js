@@ -133,7 +133,7 @@ class Thread2Database {
         }
     }
 
-    async saveCommandHistory(commandId, input, response, userId, username, success, durationMs, locale) {
+    async saveCommandHistory(commandId, input, response, userId, username, success, durationMs, locale, from = null) {
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();
 
@@ -148,7 +148,8 @@ class Thread2Database {
                 Date: new Date(),
                 Success: success,
                 elapsed_time: durationMs,
-                locale: locale
+                locale: locale,
+                from: from
             });
 
             const duration = Date.now() - startTime;

@@ -11,7 +11,8 @@ module.exports = (sequelizeInstance) => {
         Date: DataTypes.DATE,
         Success: DataTypes.BOOLEAN,
         elapsed_time: DataTypes.FLOAT,
-        locale: DataTypes.STRING
+        locale: DataTypes.STRING,
+        from: DataTypes.STRING
     }, {
         timestamps: false,
         tableName: 'commands_history'

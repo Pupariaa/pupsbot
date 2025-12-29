@@ -110,7 +110,7 @@ process.on('message', async (data) => {
                 errorCode: 'ERR_NO_SCORES'
             });
             elapsed = Date.now() - startTime;
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed, null, data.event.from);
             await metricsCollector.updateCommandResult(data.event.id, 'not_scores');
             return;
         }
@@ -167,7 +167,7 @@ process.on('message', async (data) => {
                 errorCode: 'ERR_NO_BEATMAP'
             });
             elapsed = Date.now() - startTime;
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed, null, data.event.from);
             await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
@@ -441,7 +441,7 @@ process.on('message', async (data) => {
                 errorCode: 'ERR_NO_BEATMAP'
             });
             elapsed = Date.now() - startTime;
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed, null, data.event.from);
             await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
@@ -463,7 +463,7 @@ process.on('message', async (data) => {
                 errorCode: 'ERR_NO_BEATMAP'
             });
             elapsed = Date.now() - startTime;
-            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed);
+            await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, elapsed, null, data.event.from);
             await metricsCollector.updateCommandResult(data.event.id, 'not_beatmap');
             return;
         }
@@ -509,7 +509,7 @@ process.on('message', async (data) => {
         });
 
         elapsed = Date.now() - startTime;
-        await db.saveCommandHistory(data.event.id, data.event.message, message, data.user.id, data.event.nick, true, elapsed, data.user.locale);
+        await db.saveCommandHistory(data.event.id, data.event.message, message, data.user.id, data.event.nick, true, elapsed, data.user.locale, data.event.from);
         await db.saveBeatmap(response.beatmap);
         await metricsCollector.recordStepDuration(data.event.id, 'save_command_history');
 
@@ -534,7 +534,7 @@ process.on('message', async (data) => {
             try {
                 const locale = data.user?.locale || 'FR';
                 const msg = getUserErrorMessage('ERR_WORKER_CRASH', locale);
-                await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0);
+                await db.saveCommandHistory(data.event.id, data.event.message, msg, data.user.id, data.event.nick, false, 0, null, data.event.from);
             } catch (dbError) {
                 Logger.errorCatch('OSU Worker → DB Error', dbError);
             }

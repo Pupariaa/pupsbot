@@ -410,6 +410,7 @@ global.userRequest = [];
             }
 
             event.rateLimitValid = true;
+            event.from = process.env.IRC_USERNAME;
 
             let user = null;
             try {
@@ -446,6 +447,7 @@ global.userRequest = [];
             }
 
             event.rateLimitValid = true;
+            event.from = process.env.IRC_USERNAME_2;
 
             let user = null;
             try {

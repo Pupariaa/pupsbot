@@ -255,17 +255,18 @@ global.userRequest = [];
     }, 60 * 60 * 1000);
 
     const lastRequests = {};
-    let ircBot, queue, commandManager;
+    const migrationNoticeSent = new Set();
+    let ircBot1, ircBot2, queue1, queue2, commandManager;
 
     try {
-        ircBot = new OsuIRCClient({
+        ircBot1 = new OsuIRCClient({
             username: process.env.IRC_USERNAME,
             password: process.env.IRC_PASSWORD,
             channel: "#osu",
         }, notifier);
 
-        queue = new IRCQueueManager(
-            (target, message) => ircBot.sendMessage(message, target),
+        queue1 = new IRCQueueManager(
+            (target, message) => ircBot1.sendMessage(message, target),
             {
                 maxConcurrent: 4,
                 ratePerSecond: 4,
@@ -274,9 +275,29 @@ global.userRequest = [];
             }
         );
 
-        commandManager = new CommandManager();
-        ircBot.connect();
+        ircBot1.connect();
 
+        if (process.env.IRC_USERNAME_2 && process.env.IRC_PASSWORD_2) {
+            ircBot2 = new OsuIRCClient({
+                username: process.env.IRC_USERNAME_2,
+                password: process.env.IRC_PASSWORD_2,
+                channel: "#osu",
+            }, notifier);
+
+            queue2 = new IRCQueueManager(
+                (target, message) => ircBot2.sendMessage(message, target),
+                {
+                    maxConcurrent: 4,
+                    ratePerSecond: 4,
+                    maxRetries: 2,
+                    enableLogs: true
+                }
+            );
+
+            ircBot2.connect();
+        }
+
+        commandManager = new CommandManager();
         healthMonitor.startMonitoring(1000);
 
     } catch (err) {
@@ -284,15 +305,12 @@ global.userRequest = [];
     }
 
 
-    ircBot?.onAction(async ({ target, message, nick }) => {
+    ircBot1?.onAction(async ({ target, message, nick }) => {
         try {
-            if (target !== process.env.IRC_USERNAME) return;
-
-            // Check user rate limit FIRST, before any processing
             const rateLimitResult = userRateLimiter.checkRateLimit(nick);
             if (!rateLimitResult.allowed) {
                 const message = userRateLimiter.getBlockMessage(rateLimitResult);
-                await queue.addToQueue(nick, message, true, generateId(), true);
+                await queue1.addToQueue(nick, message, true, generateId(), true);
                 userRateLimiter.logRateLimit(nick, rateLimitResult);
                 return;
             }
@@ -310,7 +328,7 @@ global.userRequest = [];
             await metricsCollector.recordStepDuration(id, 'calculate_pp');
 
             if (result.error) {
-                await queue.addToQueue(nick, result.error, false, id, false);
+                await queue1.addToQueue(nick, result.error, false, id, false);
                 await metricsCollector.finalizeCommand(id, 'error');
                 return;
             }
@@ -326,44 +344,117 @@ global.userRequest = [];
             const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de d\u00e9tails' : '!mods for more details'}`;
             performe.logCommand(user.id, 'NP');
 
-            await queue.addToQueue(nick, out, false, id, true);
+            await queue1.addToQueue(nick, out, false, id, true);
         } catch (err) {
-            await queue.addToQueue(nick, 'An error occurred while executing the /np command.', false, id, false);
+            await queue1.addToQueue(nick, 'An error occurred while executing the /np command.', false, generateId(), false);
             Logger.errorCatch('onAction', err);
         }
     });
 
-    ircBot?.onMessage(async (event) => {
+    ircBot2?.onAction(async ({ target, message, nick }) => {
         try {
-            if (event.target.toLowerCase() === process.env.IRC_USERNAME.toLowerCase()) {
-                if (!event.message.trim().startsWith('!')) return;
-
-                // Check user rate limit FIRST, before any processing
-                const rateLimitResult = userRateLimiter.checkRateLimit(event.nick);
-                if (!rateLimitResult.allowed) {
-                    const message = userRateLimiter.getBlockMessage(rateLimitResult);
-                    await queue.addToQueue(event.nick, message, true, generateId(), true);
-                    userRateLimiter.logRateLimit(event.nick, rateLimitResult);
-                    return;
-                }
-
-                // Add rate limit info to event for worker validation
-                event.rateLimitValid = true;
-
-                // TEMPORARILY DISABLED - Too many Redis errors interfering
-                // Will implement error detection in the command flow instead
-
-                let user = null;
-                try {
-                    user = await global.osuApiClient.getUser(event.nick, "osu", "username");
-                } catch (error) {
-                    Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
-                }
-                // await queue.addToQueue(event.nick, 'Cloudflare is currently experiencing disruptions. Pupsbot is temporarily unavailable. [https://status.cloudflare.com/ Cloudflare Status]', true, generateId(), true);
-
-
-                await commandManager.handleMessage(event, queue, lastRequests, user);
+            const rateLimitResult = userRateLimiter.checkRateLimit(nick);
+            if (!rateLimitResult.allowed) {
+                const message = userRateLimiter.getBlockMessage(rateLimitResult);
+                await queue2.addToQueue(nick, message, true, generateId(), true);
+                userRateLimiter.logRateLimit(nick, rateLimitResult);
+                return;
             }
+
+            const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
+            if (!beatmapId) return;
+            const id = generateId()
+            await metricsCollector.createCommandEntry(id, 'np');
+            Logger.task(`Create: /np → ${id}`);
+
+            const user = await global.osuApiClient.getUser(nick);
+            await metricsCollector.recordStepDuration(id, 'get_user');
+            const isFR = user.locale === 'FR';
+            const result = await calculatePPWithMods(beatmapId);
+            await metricsCollector.recordStepDuration(id, 'calculate_pp');
+
+            if (result.error) {
+                await queue2.addToQueue(nick, result.error, false, id, false);
+                await metricsCollector.finalizeCommand(id, 'error');
+                return;
+            }
+
+            const summary = result.NoMod;
+
+            lastRequests[nick] = {
+                beatmapId,
+                timestamp: Date.now(),
+                results: result
+            };
+
+            const out = `${isFR ? 'PP (FC/NM) pour' : 'PP (FC/NM) for'} (100 %, 98 %, 95 %, 90 %) : ${summary['100']} / ${summary['98']} / ${summary['95']} / ${summary['90']} | ${isFR ? '!mods pour plus de d\u00e9tails' : '!mods for more details'}`;
+            performe.logCommand(user.id, 'NP');
+
+            await queue2.addToQueue(nick, out, false, id, true);
+        } catch (err) {
+            await queue2.addToQueue(nick, 'An error occurred while executing the /np command.', false, generateId(), false);
+            Logger.errorCatch('onAction', err);
+        }
+    });
+
+    ircBot1?.onMessage(async (event) => {
+        try {
+            if (!event.message.trim().startsWith('!')) return;
+
+            const rateLimitResult = userRateLimiter.checkRateLimit(event.nick);
+            if (!rateLimitResult.allowed) {
+                const message = userRateLimiter.getBlockMessage(rateLimitResult);
+                await queue1.addToQueue(event.nick, message, true, generateId(), true);
+                userRateLimiter.logRateLimit(event.nick, rateLimitResult);
+                return;
+            }
+
+            event.rateLimitValid = true;
+
+            let user = null;
+            try {
+                user = await global.osuApiClient.getUser(event.nick, "osu", "username");
+            } catch (error) {
+                Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+            }
+
+            if (!migrationNoticeSent.has(event.nick.toLowerCase())) {
+                const isFR = user?.locale === 'FR';
+                const migrationMessage = isFR
+                    ? "Pupsbot évolue ! Il a désormais son propre compte \"Pupsbot\" ! Il est préférable de l'utiliser sur le nouveau compte, même si sur Puparia, les services restent actifs pour l'instant."
+                    : "Pupsbot is evolving! It now has its own account \"Pupsbot\"! It is preferable to use it on the new account, even though on Puparia, services remain active for now.";
+                await queue1.addToQueue(event.nick, migrationMessage, false, generateId(), true);
+                migrationNoticeSent.add(event.nick.toLowerCase());
+            }
+
+            await commandManager.handleMessage(event, queue1, lastRequests, user);
+        } catch (err) {
+            Logger.errorCatch('onMessage', err);
+        }
+    });
+
+    ircBot2?.onMessage(async (event) => {
+        try {
+            if (!event.message.trim().startsWith('!')) return;
+
+            const rateLimitResult = userRateLimiter.checkRateLimit(event.nick);
+            if (!rateLimitResult.allowed) {
+                const message = userRateLimiter.getBlockMessage(rateLimitResult);
+                await queue2.addToQueue(event.nick, message, true, generateId(), true);
+                userRateLimiter.logRateLimit(event.nick, rateLimitResult);
+                return;
+            }
+
+            event.rateLimitValid = true;
+
+            let user = null;
+            try {
+                user = await global.osuApiClient.getUser(event.nick, "osu", "username");
+            } catch (error) {
+                Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+            }
+
+            await commandManager.handleMessage(event, queue2, lastRequests, user);
         } catch (err) {
             Logger.errorCatch('onMessage', err);
         }

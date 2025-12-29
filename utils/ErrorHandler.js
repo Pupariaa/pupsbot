@@ -148,6 +148,18 @@ class ErrorHandler {
             error.critical = true;
             throw error;
         }
+
+        if (process.env.IRC_USERNAME_2 && !process.env.IRC_PASSWORD_2) {
+            const error = new Error('IRC_USERNAME_2 is set but IRC_PASSWORD_2 is missing');
+            error.critical = true;
+            throw error;
+        }
+
+        if (process.env.IRC_PASSWORD_2 && !process.env.IRC_USERNAME_2) {
+            const error = new Error('IRC_PASSWORD_2 is set but IRC_USERNAME_2 is missing');
+            error.critical = true;
+            throw error;
+        }
         
         logger.info('ERROR_HANDLER', 'Environment validation passed');
     }

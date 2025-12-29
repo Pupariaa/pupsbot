@@ -45,7 +45,7 @@ The bot uses **multiple algorithms** to calculate optimal PP ranges, with an int
 
 ## How It Works
 
-1. **You send a private message on osu! to the bot account `Puparia`.**
+1. **You send a private message on osu! to the bot account `Pupsbot`.**
 2. Pupsbot uses the osu! API v2 to fetch your profile and top scores.
 3. It identifies a pool of other users with similar total pp and recent trends.
 4. From their top scores, it builds a pool of candidate beatmaps.
@@ -69,7 +69,7 @@ The bot uses **multiple algorithms** to calculate optimal PP ranges, with an int
 
 ## How to Use
 
-To interact with Pupsbot, send a private message on osu! to the account **Puparia**.
+To interact with Pupsbot, send a private message on osu! to the account **Pupsbot** (formerly known as Puparia). The bot has migrated to its own dedicated account, though services remain active on Puparia for now.
 
 ### Core Command
 
@@ -393,7 +393,7 @@ pupsbot/
 
 Made by Pupariaa with ♥
 
-osu! user: Puparia
+osu! user: Puparia (bot account: Pupsbot)
 
 ## Special thanks
 

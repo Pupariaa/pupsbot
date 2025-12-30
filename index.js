@@ -324,6 +324,15 @@ global.userRequest = [];
             const user = await global.osuApiClient.getUser(nick);
             await metricsCollector.recordStepDuration(id, 'get_user');
             const isFR = user.locale === 'FR';
+
+            if (!migrationNoticeSent.has(nick.toLowerCase())) {
+                const migrationMessage = isFR
+                    ? "Pupsbot évolue ! Il a désormais son propre compte \"Pupsbot\" ! Il est préférable de l'utiliser sur le nouveau compte, même si sur Puparia, les services restent actifs pour l'instant."
+                    : "Pupsbot is evolving! It now has its own account \"Pupsbot\"! It is preferable to use it on the new account, even though on Puparia, services remain active for now.";
+                await queue1.addToQueue(nick, migrationMessage, false, generateId(), true);
+                migrationNoticeSent.add(nick.toLowerCase());
+            }
+
             const result = await calculatePPWithMods(beatmapId);
             await metricsCollector.recordStepDuration(id, 'calculate_pp');
 

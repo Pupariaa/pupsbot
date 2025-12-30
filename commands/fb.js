@@ -27,7 +27,6 @@ module.exports = {
                 user = await global.osuApiClient.getUser(event.nick);
             }
             const u = user;
-
             const responseMessage = u.locale === 'FR'
                 ? `Merci pour ton retour ♥`
                 : `Thanks for your feedback ♥`;

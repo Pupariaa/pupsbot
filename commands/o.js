@@ -12,11 +12,17 @@ module.exports = {
         try {
             await metricsCollector.createCommandEntry(event.id, 'o');
             await performe.markPending(event.id);
-            const child = fork((__dirname, '..', 'workers/osu.js'));
             if (!user) {
                 user = await global.osuApiClient.getUser(event.nick);
             }
             await metricsCollector.recordStepDuration(event.id, 'get_user');
+
+            const statusMessage = user?.locale === 'FR'
+                ? "Laisse-moi réfléchir"
+                : "Give me time to think";
+            await queue.addToQueue(event.nick, statusMessage, false, event.id, true);
+
+            const child = fork((__dirname, '..', 'workers/osu.js'));
 
             if (global.workerMonitor) {
                 global.workerMonitor.addWorker(

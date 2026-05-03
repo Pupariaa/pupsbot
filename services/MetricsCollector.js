@@ -43,6 +43,8 @@ class MetricsCollector {
             Logger.service(`InfluxDB: Disabled - missing: ${missing.join(', ')}`);
         }
 
+        this._influxEnabled = false;
+
         this._setupEventHandlers();
     }
 

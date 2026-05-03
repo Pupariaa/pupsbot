@@ -12,4 +12,4 @@ grafana-dashboard-pupsbot.json
 most_distribued-16-10-2025.json
 retry_scores_problems.log
 sequelize_logs.js
-scripts/*.log
+scripts/

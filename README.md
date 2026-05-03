@@ -415,5 +415,3 @@ But more than anything, **[Vanille](https://osu.ppy.sh/users/31114903)** played 
 From all of that emerged **Pupsbot** — a stable, fast, and modern osu! bot that is now used by thousands of players. I’m proud of what it’s become — not only as a piece of code, but as a reflection of everything I’ve learned over **more than a decade in the osu! community**.
 
 osu!, much like Minecraft, has been a constant part of my life. It shaped how I think, how I build, and how I connect with people. This project is my way of giving something back — a contribution to a game and a community that has given me so much in return.
-
-

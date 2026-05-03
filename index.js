@@ -14,6 +14,8 @@ const Notifier = require('./services/Notifier');
 const BotHealthMonitor = require('./services/BotHealthMonitor');
 const WorkerMonitor = require('./services/WorkerMonitor');
 const OsuApiInternalServer = require('./services/OsuApis/InternalServer');
+const InfrastructureNtfyMonitor = require('./services/InfrastructureNtfyMonitor');
+const AutoMessageManager = require('./services/AutoMessageManager');
 const OsuApiClient = require('./services/OsuApis/Client');
 const UserRateLimiter = require('./services/UserRateLimiter');
 const notifier = new Notifier();
@@ -21,10 +23,20 @@ const OsuUtils = require('osu-utils');
 const osuUtils = new OsuUtils();
 const TokenKeyInline = require('./services/GeneratePupswebLink');
 
-let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, userRateLimiter;
+let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, infrastructureNtfyMonitor, userRateLimiter;
 global.temp = [];
 global.activeWorkers = [];
 global.userRequest = [];
+
+const pupsbotSecondConnection = (() => {
+    const e = process.env.PUPSBOT_IS_SECOND_CONNECTION;
+    if (e === 'true') return true;
+    if (e === 'false') return false;
+    const n1 = (process.env.IRC_USERNAME || '').trim().toLowerCase();
+    const n2 = (process.env.IRC_USERNAME_2 || '').trim().toLowerCase();
+    if (!n2) return false;
+    return n2 === 'pupsbot' && n1 !== 'pupsbot';
+})();
 
 (async () => {
 
@@ -39,6 +51,8 @@ global.userRequest = [];
     await performe.init();
     await metricsCollector.init();
     await healthMonitor.init();
+
+    global.autoMessageManager = new AutoMessageManager(performe);
 
     workerMonitor.startMonitoring();
     await osuApiInternalServer.start();
@@ -304,6 +318,14 @@ global.userRequest = [];
         Logger.errorCatch('Startup', err);
     }
 
+    infrastructureNtfyMonitor = new InfrastructureNtfyMonitor({
+        performe,
+        db,
+        getPrimaryIrc: () => ircBot1,
+        getSecondaryIrc: () => ircBot2,
+        secondaryConfigured: !!(process.env.IRC_USERNAME_2 && process.env.IRC_PASSWORD_2)
+    });
+    infrastructureNtfyMonitor.start();
 
     ircBot1?.onAction(async ({ target, message, nick }) => {
         try {
@@ -420,6 +442,7 @@ global.userRequest = [];
 
             event.rateLimitValid = true;
             event.from = process.env.IRC_USERNAME;
+            event.receivingBot = pupsbotSecondConnection ? 'aux' : 'pupsbot';
 
             let user = null;
             try {
@@ -437,7 +460,11 @@ global.userRequest = [];
                 migrationNoticeSent.add(event.nick.toLowerCase());
             }
 
-            await commandManager.handleMessage(event, queue1, lastRequests, user);
+            await commandManager.handleMessage(event, queue1, lastRequests, user, {
+                botFocus: pupsbotSecondConnection ? 'aux' : 'main',
+                receivingBot: pupsbotSecondConnection ? 'aux' : 'pupsbot',
+                pupsbotIrcSession: pupsbotSecondConnection ? false : true
+            });
         } catch (err) {
             Logger.errorCatch('onMessage', err);
         }
@@ -457,6 +484,7 @@ global.userRequest = [];
 
             event.rateLimitValid = true;
             event.from = process.env.IRC_USERNAME_2;
+            event.receivingBot = pupsbotSecondConnection ? 'pupsbot' : 'aux';
 
             let user = null;
             try {
@@ -465,7 +493,11 @@ global.userRequest = [];
                 Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
             }
 
-            await commandManager.handleMessage(event, queue2, lastRequests, user);
+            await commandManager.handleMessage(event, queue2, lastRequests, user, {
+                botFocus: pupsbotSecondConnection ? 'main' : 'aux',
+                receivingBot: pupsbotSecondConnection ? 'pupsbot' : 'aux',
+                pupsbotIrcSession: pupsbotSecondConnection ? true : false
+            });
         } catch (err) {
             Logger.errorCatch('onMessage', err);
         }
@@ -479,6 +511,10 @@ async function gracefulShutdown() {
 
         if (healthMonitor) {
             await healthMonitor.close();
+        }
+
+        if (infrastructureNtfyMonitor) {
+            infrastructureNtfyMonitor.stop();
         }
 
         if (performe) {

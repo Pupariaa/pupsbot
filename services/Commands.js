@@ -29,13 +29,28 @@ class CommandManager {
         }
     }
 
-    async handleMessage(event, queue, lastRequests, user = null) {
+    async handleMessage(event, queue, lastRequests, user = null, options = {}) {
         const content = event.message;
         const parts = content.slice(1).trim().split(' ');
         const commandName = parts[0].toLowerCase();
         const args = parts.slice(1);
 
         event.id = generateId();
+        event.botFocus = options.botFocus || 'main';
+        const resolvedReceivingBot =
+            options.receivingBot !== undefined && options.receivingBot !== null
+                ? options.receivingBot
+                : event.botFocus === 'aux'
+                  ? 'aux'
+                  : 'pupsbot';
+        event.receivingBot = resolvedReceivingBot;
+
+        const execOptions = {
+            ...options,
+            receivingBot: resolvedReceivingBot,
+            pupsbotIrcSession: options.pupsbotIrcSession === true
+        };
+
         const command = this.commands.get(commandName);
 
         if (!command) {
@@ -45,7 +60,16 @@ class CommandManager {
         Logger.task(`Command received: !${commandName} → ${event.id}`);
 
         try {
-            await command.execute(event, args, queue, lastRequests, user);
+            await command.execute(event, args, queue, lastRequests, user, execOptions);
+            if (global.autoMessageManager && user?.id) {
+                await global.autoMessageManager.trySendAfterCommand({
+                    event,
+                    queue,
+                    user,
+                    commandName,
+                    botFocus: event.botFocus
+                });
+            }
         } catch (error) {
             Logger.errorCatch(`CommandManager::${commandName}`, error);
 

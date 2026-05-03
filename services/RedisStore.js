@@ -454,9 +454,37 @@ class Performe {
             await metricsCollector.close();
         }
     }
+
+    async ping() {
+        const started = Date.now();
+        await this._ensureReady();
+        await this._redis.ping();
+        return Date.now() - started;
+    }
+
     async get(key) {
         await this._ensureReady();
         return await this._redis.get(key);
+    }
+
+    async setValue(key, value) {
+        await this._ensureReady();
+        await this._redis.set(key, value);
+    }
+
+    async deleteKeysMatching(pattern) {
+        await this._ensureReady();
+        const batch = [];
+        for await (const key of this._redis.scanIterator({ MATCH: pattern, COUNT: 200 })) {
+            batch.push(key);
+            if (batch.length >= 500) {
+                await this._redis.del(batch);
+                batch.length = 0;
+            }
+        }
+        if (batch.length > 0) {
+            await this._redis.del(batch);
+        }
     }
 
     async setex(key, seconds, value) {

@@ -269,7 +269,13 @@ ircBot?.onMessage(async (event) => {
     try {
         if (event.target.toLowerCase() === process.env.IRC_USERNAME.toLowerCase()) {
             if (!event.message.trim().startsWith('!')) return;
-            await commandManager.handleMessage(event, queue, lastRequests);
+            event.from = process.env.IRC_USERNAME;
+            event.receivingBot = 'pupsbot';
+            await commandManager.handleMessage(event, queue, lastRequests, null, {
+                botFocus: 'main',
+                receivingBot: 'pupsbot',
+                pupsbotIrcSession: true
+            });
         }
     } catch (err) {
         Logger.errorCatch('onMessage', err);

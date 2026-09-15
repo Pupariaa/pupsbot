@@ -50,7 +50,7 @@ module.exports = {
             await metricsCollector.updateCommandResult(event.id, 'success');
 
             const duration = Date.now() - startTime;
-            logger.performance('HELP_COMMAND', duration, {
+            Logger.performance('HELP_COMMAND', duration, {
                 user: event.nick,
                 success: true
             });

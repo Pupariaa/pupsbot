@@ -28,18 +28,33 @@ class IRCQueueManager {
         this._blockedUsers = new Map();
 
         this._performe = new RedisStore();
-        this._performe.init();
+        if (!global.degradedMode) {
+            this._performe.init();
+        }
 
         this._metricsCollector = new MetricsCollector();
         this._startLoop();
     }
 
     async addToQueue(target, message, bypass = false, id = null, success = true) {
+        if (global.degradedMode || global.noApiMode) {
+            try {
+                await this._sendFunction(target, message);
+                if (this._enableLogs) {
+                    const short = message.length > 10 ? message.slice(0, 10) + '...' : message;
+                    Logger.queue(`Sent "${short}" → ${target}`);
+                }
+            } catch (error) {
+                Logger.taskError(`Failed to send message to ${target}: ${error.message}`);
+            }
+            return;
+        }
+
         const now = Date.now();
 
         if (!bypass) {
             if (this._blockedUsers.has(target) && now < this._blockedUsers.get(target)) {
-                if (id && success === false) {
+                if (id && success === false && !global.degradedMode) {
                     await this._performe.markCancelled(id);
                 }
                 return;
@@ -67,14 +82,16 @@ class IRCQueueManager {
                     );
                 }
 
-                for (const task of removed) {
-                    if (task.id) {
-                        await this._performe.markCancelled(task.id);
+                if (!global.degradedMode) {
+                    for (const task of removed) {
+                        if (task.id) {
+                            await this._performe.markCancelled(task.id);
+                        }
                     }
-                }
 
-                if (id) {
-                    await this._performe.markCancelled(id);
+                    if (id) {
+                        await this._performe.markCancelled(id);
+                    }
                 }
 
                 return;
@@ -107,7 +124,11 @@ class IRCQueueManager {
                 const task = this._queue.shift();
 
                 if (task.success === false && task.id) {
-                    await this._performe.markCancelled(task.id);
+                    try {
+                        await this._performe.markCancelled(task.id);
+                    } catch (error) {
+                        Logger.taskError(`markCancelled failed for ${task.id}: ${error.message}`);
+                    }
                     continue;
                 }
 
@@ -117,12 +138,14 @@ class IRCQueueManager {
     }
 
     async _processTask(task) {
-        await this._metricsCollector.init();
+        if (!global.degradedMode) {
+            await this._metricsCollector.init();
+        }
         this._activeCount++;
 
         try {
             await this._sendFunction(task.target, task.message);
-            if (task.id) {
+            if (task.id && !global.degradedMode) {
                 await this._performe.markResolved(task.id);
                 await this._metricsCollector.finalizeCommand(task.id, 'completed');
             }
@@ -133,7 +156,9 @@ class IRCQueueManager {
                 this._queue.push(task);
             } else {
                 Logger.taskError(`Failed to send message to ${task.target}: ${error.message}`);
-                await this._metricsCollector.finalizeCommand(task.id, 'failed');
+                if (!global.degradedMode) {
+                    await this._metricsCollector.finalizeCommand(task.id, 'failed');
+                }
                 await notifier.send(
                     `Failed to send IRC message to ${task.target} after ${this._maxRetries} attempts.\nMessage: "${task.message}"\nError: ${error.message}`,
                     'IRCQUEUE.FAILURE'

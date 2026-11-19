@@ -14,3 +14,4 @@ retry_scores_problems.log
 sequelize_logs.js
 scripts/
 auto-message.json
+README-ADMIN-COMMANDS.local.md

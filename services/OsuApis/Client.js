@@ -247,6 +247,8 @@ class OsuApiClient {
         try {
             const response = await this.client.post(`/user/${userId}/top-scores/all-modes`, {
                 id
+            }, {
+                timeout: 120000
             });
 
             if (!response.data.success) {

@@ -3,18 +3,30 @@ const RedisStore = require('../RedisStore');
 const MetricsCollector = require('../MetricsCollector');
 const RateLimiter = require('./RateLimiter');
 const Logger = require('../../utils/Logger');
+const { shouldSkipBackend } = require('../DegradedMode');
 
 class OsuApiManager {
     constructor() {
-        this.v2 = new V2();
+        this.rateLimiter = new RateLimiter(60, 10);
+        this.v2 = new V2(this.rateLimiter);
         this.redis = null;
         this.metrics = null;
-        this.rateLimiter = new RateLimiter(60, 10); // 60 req/min, 10 burst
         this.isInitialized = false;
     }
 
     async init() {
         if (this.isInitialized) return;
+
+        if (shouldSkipBackend()) {
+            try {
+                await this.v2.initializeAuth();
+            } catch (error) {
+                Logger.errorCatch('OsuApiManager', `Auth init skipped in degraded mode: ${error.message}`);
+            }
+            this.isInitialized = true;
+            Logger.service('OsuApiManager: Initialized in degraded mode (no Redis)');
+            return;
+        }
 
         try {
             this.redis = new RedisStore();
@@ -53,11 +65,16 @@ class OsuApiManager {
         const startTime = Date.now();
 
         try {
-            let cachedProfile = await this.redis.getCachedProfile(user);
+            let cachedProfile = null;
+            if (this.redis) {
+                cachedProfile = await this.redis.getCachedProfile(user);
+            }
 
             if (cachedProfile) {
                 const duration = Date.now() - startTime;
-                await this.metrics.recordServicePerformance('api', 'getUser', duration, 'redis');
+                if (this.metrics) {
+                    await this.metrics.recordServicePerformance('api', 'getUser', duration, 'redis');
+                }
 
                 this.refreshUserInBackground(user, mode, forceType).catch(error => {
                     Logger.errorCatch('OsuApiManager', `Background refresh failed for ${user}: ${error.message}`);
@@ -66,24 +83,27 @@ class OsuApiManager {
                 return cachedProfile;
             }
 
-            const userData = await this.rateLimiter.executeRequest(async () => {
-
-                return await this.v2.getUser(user, mode, forceType);
-            });
+            const userData = await this.v2.getUser(user, mode, forceType);
 
             const standardizedData = this.standardizeUserData(userData, mode);
-            await this.redis.setCachedProfile(user, standardizedData);
-            if (standardizedData.topRanks) {
-                await this.redis.setTopRanks(userData.id, standardizedData.topRanks);
+            if (this.redis) {
+                await this.redis.setCachedProfile(user, standardizedData);
+                if (standardizedData.topRanks) {
+                    await this.redis.setTopRanks(userData.id, standardizedData.topRanks);
+                }
             }
 
             const duration = Date.now() - startTime;
-            await this.metrics.recordServicePerformance('api', 'getUser', duration, 'v2');
+            if (this.metrics) {
+                await this.metrics.recordServicePerformance('api', 'getUser', duration, 'v2');
+            }
 
             return standardizedData;
         } catch (error) {
             const duration = Date.now() - startTime;
-            await this.metrics.recordServicePerformance('api', 'getUser', duration, 'error');
+            if (this.metrics) {
+                await this.metrics.recordServicePerformance('api', 'getUser', duration, 'error');
+            }
 
             Logger.errorCatch('OsuApiManager', `getUser failed for ${user}: ${error.message}`);
             throw error;
@@ -91,11 +111,10 @@ class OsuApiManager {
     }
 
     async refreshUserInBackground(user, mode = 'osu', forceType = null) {
+        if (!this.redis) return;
         try {
 
-            const userData = await this.rateLimiter.executeRequest(async () => {
-                return await this.v2.getUser(user, mode, forceType);
-            });
+            const userData = await this.v2.getUser(user, mode, forceType);
 
             const standardizedData = this.standardizeUserData(userData, mode);
             await this.redis.setCachedProfile(user, standardizedData);
@@ -145,9 +164,7 @@ class OsuApiManager {
             }
 
 
-            const scores = await this.rateLimiter.executeRequest(async () => {
-                return await this.v2.getUserBestScores(userId, options);
-            });
+            const scores = await this.v2.getUserBestScores(userId, options);
 
             const standardizedScores = this.standardizeScoresData(scores);
 
@@ -167,9 +184,7 @@ class OsuApiManager {
 
     async refreshUserBestScoresInBackground(userId, options, cacheKey) {
         try {
-            const scores = await this.rateLimiter.executeRequest(async () => {
-                return await this.v2.getUserBestScores(userId, options);
-            });
+            const scores = await this.v2.getUserBestScores(userId, options);
 
             const standardizedScores = this.standardizeScoresData(scores);
             await this.redis.setex(cacheKey, 300, JSON.stringify(standardizedScores));
@@ -235,9 +250,7 @@ class OsuApiManager {
                 await this.metrics.recordServicePerformance('api', 'getBeatmap', duration, 'redis');
                 return JSON.parse(cachedBeatmap);
             }
-            const beatmap = await this.rateLimiter.executeRequest(async () => {
-                return await this.v2.getBeatmap(beatmapId);
-            });
+            const beatmap = await this.v2.getBeatmap(beatmapId);
             source = 'v2';
 
             // Cache the result asynchronously to avoid blocking

@@ -1,4 +1,5 @@
 const Logger = require('../utils/Logger');
+const { shouldSkipBackend } = require('./DegradedMode');
 
 class WorkerMonitor {
     constructor() {
@@ -195,6 +196,7 @@ class WorkerMonitor {
      * Start monitoring all workers
      */
     startMonitoring() {
+        if (shouldSkipBackend()) return;
         if (this.monitoringInterval) {
             clearInterval(this.monitoringInterval);
         }
@@ -271,6 +273,7 @@ class WorkerMonitor {
      * Force Redis update (called when workers are added/removed)
      */
     async forceRedisUpdate() {
+        if (shouldSkipBackend()) return;
         if (global.botHealthMonitor) {
             try {
                 await global.botHealthMonitor.updateWorkerDataInRedis();

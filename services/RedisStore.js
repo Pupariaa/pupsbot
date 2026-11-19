@@ -2,6 +2,7 @@ const RedisManager = require('./Redis');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
 const MetricsCollector = require('./MetricsCollector');
+const { shouldSkipBackend } = require('./DegradedMode');
 const notifier = new Notifier();
 
 class Performe {
@@ -12,6 +13,7 @@ class Performe {
     }
 
     async init() {
+        if (shouldSkipBackend()) return;
         if (this._connected) return;
         try {
             await this._redisManager.connect();
@@ -236,6 +238,7 @@ class Performe {
     }
 
     async _ensureReady() {
+        if (shouldSkipBackend()) return;
         if (!this._connected) {
             await this.init();
         }
@@ -456,6 +459,9 @@ class Performe {
     }
 
     async ping() {
+        if (shouldSkipBackend()) {
+            throw new Error('Redis unavailable in degraded mode');
+        }
         const started = Date.now();
         await this._ensureReady();
         await this._redis.ping();
@@ -490,6 +496,17 @@ class Performe {
     async setex(key, seconds, value) {
         await this._ensureReady();
         return await this._redis.setEx(key, seconds, value);
+    }
+
+    async del(key) {
+        await this._ensureReady();
+        return await this._redis.del(key);
+    }
+
+    async setNx(key, value, ttlSec) {
+        await this._ensureReady();
+        const result = await this._redis.set(key, value, { NX: true, EX: ttlSec });
+        return result === 'OK';
     }
 
     async setTopRanks(userId, topRanks) {

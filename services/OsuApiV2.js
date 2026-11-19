@@ -10,8 +10,6 @@ class OsuApiV2 {
         this.auth = new OsuAuth();
         this.baseUrl = 'https://osu.ppy.sh/api/v2';
         this.notifier = new Notifier();
-
-        this.initializeAuth();
     }
 
     async initializeAuth() {
@@ -61,6 +59,7 @@ class OsuApiV2 {
             if (error.response?.status === 401) {
                 try {
                     Logger.service('OsuApiV2: Token expired, getting new token');
+                    this.auth.clearTokenData();
                     const newAccessToken = await this.auth.getValidAccessToken();
 
                     const retryConfig = {

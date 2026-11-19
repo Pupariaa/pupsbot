@@ -4,6 +4,7 @@ const MetricsCollector = require('./MetricsCollector');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
 const generateId = require('../utils/generateId');
+const { shouldSkipBackend } = require('./DegradedMode');
 
 class BotHealthMonitor {
     constructor() {
@@ -86,6 +87,7 @@ class BotHealthMonitor {
     }
 
     async updateWorkerDataInRedis() {
+        if (shouldSkipBackend()) return;
         try {
             if (!global.workerMonitor) {
                 Logger.service('BotHealthMonitor: global.workerMonitor not available');
@@ -137,6 +139,7 @@ class BotHealthMonitor {
     }
 
     async updateSystemDataInRedis(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary) {
+        if (shouldSkipBackend()) return;
         try {
             const systemData = {
                 memory: {
@@ -218,11 +221,18 @@ class BotHealthMonitor {
             await this.metricsCollector.finalizeCommand(healthId, 'success');
 
             await this.recordServicePerformance(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary);
+            this.recordRateLimiter();
 
         } catch (error) {
             await this.metricsCollector.finalizeCommand(healthId, 'error');
             Logger.errorCatch('BotHealthMonitor.collectHealthMetrics', error);
         }
+    }
+
+    recordRateLimiter() {
+        const limiter = global.osuRateLimiter;
+        if (!limiter || typeof limiter.getStats !== 'function') return;
+        this.metricsCollector.recordRateLimiter(limiter.getStats());
     }
 
     async recordServicePerformance(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary) {

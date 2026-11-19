@@ -8,13 +8,23 @@ const modsToBitwise = require('../../utils/osu/modsToBitwise');
 const osu_utils = require('osu-utils');
 const osuUtils = new osu_utils();
 
+const INTERACTIVE_OPERATIONS = new Set([
+    'GETUSER_V2',
+    'GETBEATMAP_V2',
+    'GETUSERBEATMAPSCORE_V2',
+    'GETBEATMAPATTRIBUTES_V2'
+]);
+
+function requestPriority(operationName) {
+    return INTERACTIVE_OPERATIONS.has(operationName) ? 'interactive' : 'bulk';
+}
+
 class OsuApiV2 {
-    constructor() {
+    constructor(rateLimiter) {
         this.auth = new OsuAuth();
         this.baseUrl = 'https://osu.ppy.sh/api/v2';
         this.notifier = new Notifier();
-
-        this.initializeAuth();
+        this.rateLimiter = rateLimiter;
     }
 
     async initializeAuth() {
@@ -25,7 +35,7 @@ class OsuApiV2 {
             Logger.errorCatch('OsuApiV2', 'Failed to initialize authentication');
         }
     }
-    async makeAuthenticatedRequest(endpoint, options = {}, operationName = 'API_REQUEST') {
+    async makeAuthenticatedRequest(endpoint, options = {}, operationName = 'API_REQUEST', priority = null) {
         const performe = new RedisStore();
         const metricsCollector = new MetricsCollector();
         let duration = null;
@@ -47,7 +57,8 @@ class OsuApiV2 {
                 }
             };
 
-            const response = await axios(config);
+            const resolvedPriority = priority || requestPriority(operationName);
+            const response = await this.rateLimiter.executeRequest(() => axios(config), resolvedPriority);
             duration = await t.stop(operationName);
 
             await metricsCollector.recordServicePerformance('api', operationName, duration, 'v2');
@@ -60,6 +71,7 @@ class OsuApiV2 {
             if (error.response?.status === 401) {
                 try {
                     Logger.service('OsuApiV2: Token expired, getting new token');
+                    this.auth.clearTokenData();
                     const newAccessToken = await this.auth.getValidAccessToken();
 
                     const retryConfig = {
@@ -73,10 +85,11 @@ class OsuApiV2 {
                         }
                     };
 
-                    const retryResponse = await axios(retryConfig);
+                    const retryResponse = await this.rateLimiter.executeRequest(() => axios(retryConfig), priority || requestPriority(operationName));
                     return retryResponse.data;
                 } catch (retryError) {
                     const msg = `API V2 request failed after token renewal: ${retryError.message}`;
+                    metricsCollector.recordApiFailure(operationName, retryError.response?.status);
                     Logger.errorCatch('OsuApiV2', msg);
                     await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
                     throw new Error(msg);
@@ -84,10 +97,11 @@ class OsuApiV2 {
             }
 
             // Handle 404 as a special case - don't log as error for getUserBeatmapScore
-            if (error.response?.status === 404 && operationName === 'GETUSERBEATMAPSCORE_V2') {
-                throw error; // Re-throw to let getUserBeatmapScore handle it
+            if (error.response?.status === 404 && (operationName === 'GETUSERBEATMAPSCORE_V2' || operationName === 'GETSCORE_V2')) {
+                throw error;
             }
 
+            metricsCollector.recordApiFailure(operationName, error.response?.status);
             const msg = `API V2 request failed: ${error.response?.data?.error || error.message}`;
             Logger.errorCatch('OsuApiV2', msg);
             await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
@@ -152,7 +166,7 @@ class OsuApiV2 {
             await metricsCollector.close();
         }
     }
-    async getUserBestScores(userId, options = {}) {
+    async getUserBestScores(userId, options = {}, priority = null) {
         const {
             mode = 'osu',
             limit = 100,
@@ -166,11 +180,11 @@ class OsuApiV2 {
         });
 
         const endpoint = `/users/${userId}/scores/best?${params.toString()}`;
-        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEST_V2');
+        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETUSERBEST_V2', priority);
     }
-    async getFullUser(userId) {
+    async getFullUser(userId, priority = null) {
         const endpoint = `/users/${userId}/osu`;
-        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETFULLUSER_V2');
+        return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETFULLUSER_V2', priority);
     }
     async getUserRecentScores(userId, options = {}) {
         const {
@@ -243,6 +257,17 @@ class OsuApiV2 {
             }
 
             Logger.errorCatch('OsuApiV2', `getUserBeatmapScore failed for beatmap ${beatmapId}, user ${userId}: ${error.message}`, error);
+            throw error;
+        }
+    }
+    async getScore(scoreId, priority = 'rework') {
+        const endpoint = `/scores/osu/${scoreId}`;
+        try {
+            return await this.makeAuthenticatedRequest(endpoint, { method: 'GET' }, 'GETSCORE_V2', priority);
+        } catch (error) {
+            if (error.response?.status === 404) {
+                return null;
+            }
             throw error;
         }
     }

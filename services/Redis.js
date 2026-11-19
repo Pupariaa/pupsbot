@@ -2,12 +2,19 @@ const { createClient } = require('redis');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
 const MetricsCollector = require('./MetricsCollector');
+const { shouldSkipBackend } = require('./DegradedMode');
 const notifier = new Notifier();
 
 class RedisManager {
     constructor() {
         this._connected = false;
         this._connecting = false;
+        this._skipped = shouldSkipBackend();
+
+        if (this._skipped) {
+            this.client = null;
+            return;
+        }
 
         this.client = createClient({
             socket: {
@@ -22,12 +29,15 @@ class RedisManager {
     }
 
     _setupEventHandlers() {
+        if (!this.client) return;
+
         this.client.on('connect', () => {
             this._connected = true;
             this._connecting = false;
         });
 
         this.client.on('error', async (error) => {
+            if (shouldSkipBackend()) return;
             Logger.redisErr('REDIS.ERROR', error);
             await notifier.send(`Redis error: ${error.message}`, 'REDIS.ERROR');
         });
@@ -39,6 +49,7 @@ class RedisManager {
     }
 
     async connect(force = false) {
+        if (this._skipped || shouldSkipBackend()) return;
         if (this._connected && !force) return;
         if (this._connecting) return;
 
@@ -67,7 +78,7 @@ class RedisManager {
     }
 
     async quit() {
-        if (!this._connected) return;
+        if (this._skipped || !this._connected) return;
 
         const metricsCollector = new MetricsCollector();
         const startTime = Date.now();

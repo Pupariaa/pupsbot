@@ -2,6 +2,7 @@ const { createClient } = require('redis');
 const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 const Logger = require('../utils/Logger');
 const Notifier = require('./Notifier');
+const { shouldSkipBackend } = require('./DegradedMode');
 const notifier = new Notifier();
 
 class MetricsCollector {
@@ -9,6 +10,20 @@ class MetricsCollector {
         this._connected = false;
         this._connecting = false;
         this._redis = null;
+        this._skipped = shouldSkipBackend();
+
+        this._influxClient = null;
+        this._influxWriteApi = null;
+        this._influxOrg = process.env.INFLUX_ORG || '';
+        this._influxBucket = process.env.INFLUX_BUCKET || 'metrics';
+        const rawToken = process.env.INFLUX_TOKEN || '';
+        this._influxToken = rawToken.trim().replace(/^["']|["']$/g, '');
+        this._influxUrl = process.env.INFLUX_URL || '';
+        this._influxEnabled = false;
+
+        if (this._skipped) {
+            return;
+        }
 
         this.client = createClient({
             socket: {
@@ -20,19 +35,10 @@ class MetricsCollector {
             database: parseInt(process.env.REDIS_METRICS_DB || process.env.REDIS_DB || '0', 10)
         });
 
-        this._influxClient = null;
-        this._influxWriteApi = null;
-        this._influxOrg = process.env.INFLUX_ORG || '';
-        this._influxBucket = process.env.INFLUX_BUCKET || 'metrics';
-        const rawToken = process.env.INFLUX_TOKEN || '';
-        this._influxToken = rawToken.trim().replace(/^["']|["']$/g, '');
-        this._influxUrl = process.env.INFLUX_URL || '';
-
         if (rawToken && !this._influxToken) {
             Logger.service(`WARNING: INFLUX_TOKEN was set but is empty after processing. Raw length: ${rawToken.length}`);
         }
 
-        this._influxEnabled = false;
         if (this._influxUrl && this._influxToken && this._influxOrg) {
             this._influxEnabled = true;
         } else {
@@ -43,18 +49,19 @@ class MetricsCollector {
             Logger.service(`InfluxDB: Disabled - missing: ${missing.join(', ')}`);
         }
 
-        this._influxEnabled = false;
-
         this._setupEventHandlers();
     }
 
     _setupEventHandlers() {
+        if (!this.client) return;
+
         this.client.on('connect', () => {
             this._connected = true;
             this._connecting = false;
         });
 
         this.client.on('error', async (error) => {
+            if (shouldSkipBackend()) return;
             Logger.redisErr('METRICS_REDIS.ERROR', error);
             await notifier.send(`MetricsCollector Redis error: ${error.message}`, 'METRICS_REDIS.ERROR');
         });
@@ -66,6 +73,7 @@ class MetricsCollector {
     }
 
     async init() {
+        if (this._skipped || shouldSkipBackend()) return;
         if (this._connected) return;
         if (this._connecting) return;
 
@@ -92,7 +100,10 @@ class MetricsCollector {
                 }
 
                 this._influxClient = new InfluxDB({ url: this._influxUrl, token: this._influxToken });
-                this._influxWriteApi = this._influxClient.getWriteApi(this._influxOrg, this._influxBucket, 'ms');
+                this._influxWriteApi = this._influxClient.getWriteApi(this._influxOrg, this._influxBucket, 'ms', {
+                    flushInterval: 5000,
+                    batchSize: 200
+                });
                 this._influxWriteApi.useDefaultTags({ source: 'pupsbot' });
             } catch (error) {
                 Logger.errorCatch('METRICS_COLLECTOR.INFLUX_INIT', error);
@@ -102,6 +113,7 @@ class MetricsCollector {
     }
 
     async createCommandEntry(commandId, commandName, userId = null, additionalData = {}) {
+        if (this._skipped || shouldSkipBackend()) return;
         try {
             await this._ensureReady();
             const timestamp = Date.now();
@@ -138,11 +150,13 @@ class MetricsCollector {
 
             this._writeToInflux('command_created', {
                 commandId: commandId.toString(),
-                commandName: commandName.toString(),
                 userId: userId?.toString() || '',
-                status: 'pending',
                 timestamp: timestamp
-            }, additionalData);
+            }, {
+                commandName: commandName.toString(),
+                status: 'pending',
+                ...(additionalData || {})
+            });
 
             return timestamp;
         } catch (error) {
@@ -199,7 +213,7 @@ class MetricsCollector {
             this._writeToInflux('command_durations_updated', {
                 commandId: commandId.toString(),
                 totalDuration: totalDuration
-            }, durations);
+            });
 
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.UPDATE_DURATIONS', error);
@@ -208,6 +222,7 @@ class MetricsCollector {
     }
 
     async finalizeCommand(commandId, status, finalDurations = null) {
+        if (this._skipped || shouldSkipBackend()) return;
         try {
             await this._ensureReady();
 
@@ -240,11 +255,14 @@ class MetricsCollector {
 
             await this._redis.hSet(key, updateData);
 
+            const storedCommand = await this._redis.hGetAll(key);
             this._writeToInflux('command_finalized', {
                 commandId: commandId.toString(),
-                status: status.toString(),
                 endTime: endTime,
                 totalDuration: parseFloat(updateData.totalDuration) || 0
+            }, {
+                status: status.toString(),
+                commandName: storedCommand.commandName || 'unknown'
             });
 
         } catch (error) {
@@ -433,6 +451,7 @@ class MetricsCollector {
     }
 
     async recordStepDuration(commandId, stepName) {
+        if (this._skipped || shouldSkipBackend()) return;
         try {
             await this._ensureReady();
 
@@ -465,8 +484,9 @@ class MetricsCollector {
 
             this._writeToInflux('step_duration_recorded', {
                 commandId: commandId.toString(),
-                stepName: stepName,
                 duration: duration
+            }, {
+                stepName: stepName
             });
 
             const allData = await this._redis.hGetAll(key);
@@ -548,8 +568,9 @@ class MetricsCollector {
 
             this._writeToInflux('database_timer', {
                 commandId: commandId.toString(),
-                operation: operation,
                 duration: duration
+            }, {
+                operation: operation
             });
 
             const allData = await this._redis.hGetAll(key);
@@ -601,8 +622,9 @@ class MetricsCollector {
 
             this._writeToInflux('redis_timer', {
                 commandId: commandId.toString(),
-                operation: operation,
                 duration: duration
+            }, {
+                operation: operation
             });
 
             const allData = await this._redis.hGetAll(key);
@@ -654,9 +676,10 @@ class MetricsCollector {
 
             this._writeToInflux('api_timer', {
                 commandId: commandId.toString(),
-                operation: operation,
-                version: version,
                 duration: duration
+            }, {
+                operation: operation,
+                version: version
             });
 
             const allData = await this._redis.hGetAll(key);
@@ -674,6 +697,7 @@ class MetricsCollector {
     }
 
     async recordServicePerformance(serviceType, operation, duration, version = null) {
+        if (this._skipped || shouldSkipBackend()) return;
         try {
             await this._ensureReady();
             const operationKey = version ? `${operation}_${version}` : operation;
@@ -689,10 +713,12 @@ class MetricsCollector {
             });
 
             this._writeToInflux('service_performance', {
+                duration: duration
+            }, {
                 serviceType: serviceType,
-                operation: operationKey,
-                duration: duration,
-                version: version || ''
+                operation: operation,
+                version: version || 'none',
+                status: 'ok'
             });
 
         } catch (error) {
@@ -793,6 +819,7 @@ class MetricsCollector {
     }
 
     async _ensureReady() {
+        if (this._skipped || shouldSkipBackend()) return;
         if (!this._connected) {
             await this.init();
         }
@@ -803,7 +830,7 @@ class MetricsCollector {
     }
 
     async close() {
-        if (!this._connected) return;
+        if (this._skipped || !this._connected) return;
         try {
             await this.client.quit();
             this._connected = false;
@@ -839,7 +866,7 @@ class MetricsCollector {
             }
 
             for (const [key, value] of Object.entries(tags)) {
-                if (value !== null && value !== undefined) {
+                if (value !== null && value !== undefined && value !== '') {
                     point.tag(key, value.toString());
                 }
             }
@@ -867,9 +894,36 @@ class MetricsCollector {
             response: response.toString(),
             userId: userId?.toString() || '',
             username: username?.toString() || '',
-            success: success ? 1 : 0,
-            durationMs: durationMs || 0,
-            locale: locale?.toString() || ''
+            durationMs: durationMs || 0
+        }, {
+            locale: locale?.toString() || 'unknown',
+            success: success ? '1' : '0'
+        });
+    }
+
+    recordApiFailure(operation, httpStatus) {
+        this._writeToInflux('service_performance', {
+            duration: 0,
+            httpStatus: Number(httpStatus) || 0
+        }, {
+            serviceType: 'api',
+            operation: operation || 'unknown',
+            version: 'v2',
+            status: 'error'
+        });
+    }
+
+    recordRateLimiter(stats) {
+        if (!stats) return;
+        this._writeToInflux('rate_limiter', {
+            tokensAvailable: Number(stats.tokensAvailable) || 0,
+            requestsInLastMinute: Number(stats.requestsInLastMinute) || 0,
+            utilizationPercent: Number(stats.utilizationPercent) || 0,
+            interactiveQueued: Number(stats.interactiveQueued) || 0,
+            bulkQueued: Number(stats.bulkQueued) || 0,
+            reworkQueued: Number(stats.reworkQueued) || 0,
+            lowQueued: Number(stats.lowQueued) || 0,
+            reworkMode: stats.reworkMode ? 1 : 0
         });
     }
 
@@ -879,10 +933,12 @@ class MetricsCollector {
      * @param {string} data - Data to store (JSON string)
      */
     async setRedisData(key, data) {
+        if (this._skipped || shouldSkipBackend()) return;
         try {
             if (!this._connected) {
                 await this.init();
             }
+            if (!this.client) return;
             await this.client.set(key, data);
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.SET_REDIS_DATA', error);
@@ -896,10 +952,12 @@ class MetricsCollector {
      * @returns {string|null} Data from Redis
      */
     async getRedisData(key) {
+        if (this._skipped || shouldSkipBackend()) return null;
         try {
             if (!this._connected) {
                 await this.init();
             }
+            if (!this.client) return null;
             return await this.client.get(key);
         } catch (error) {
             Logger.errorCatch('METRICS_COLLECTOR.GET_REDIS_DATA', error);

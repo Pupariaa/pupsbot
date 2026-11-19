@@ -1,6 +1,5 @@
 
 const Thread2Database = require('../services/SQL');
-const fork = require('child_process').fork;
 const RedisStore = require('../services/RedisStore');
 const Logger = require('../utils/Logger');
 const MetricsCollector = require('../services/MetricsCollector');

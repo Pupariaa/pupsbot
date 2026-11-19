@@ -33,13 +33,12 @@ The bot uses **multiple algorithms** to calculate optimal PP ranges, with an int
 
 ---
 
-## Latest Updates (v2.3.2)
+## Latest Updates (v2.4.0)
 
 ### What's New
-- **Better Suggestions**: Improved algorithm for finding beatmaps you haven't played yet
-- **Faster Performance**: Optimized system for quicker response times
-- **More Reliable**: Enhanced error handling and connection stability
-- **Smarter Selection**: Better variety in beatmap recommendations
+- **Minor fixes**: small corrections across commands and startup
+- **Steadier statistics**: command, status, and API series can be grouped, and API errors are recorded
+- **Tighter osu! API budget**: player commands go first, bulk work and background scans wait. Replies can take a little longer. That wait keeps the bot inside the quota
 
 ---
 

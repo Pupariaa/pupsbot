@@ -21,21 +21,17 @@ module.exports = {
             }
             const u = user;
             const responseMessage = u.locale === 'FR'
-                ? `-- v2.3.2 Nouvelle mise à jour Pupsbot ! --
-            - Système de tracking amélioré avec Map et intervalles multiples
-            - Gestion TTL optimisée pour les suggestions Redis
-            - Sélection intelligente des beatmaps avec DistributionManager
-            - Gestion d'erreurs renforcée pour Redis et Database
-            - Système de fallback progressif pour de meilleurs résultats
-            - Dashboard de suivi des suggestions et modifications des préférences [https://pb.pupsweb.cc -> Lien]
+                ? `-- v2.4.0 Nouvelle mise à jour Pupsbot ! --
+            - Correctifs mineurs
+            - Statistiques plus fiables
+            - Budget d'API osu! mieux tenu : les commandes passent en premier, le reste attend son tour
+            - Les réponses peuvent prendre un peu plus de temps. C'est le prix pour rester dans le quota
                 `
-                : `-- v2.3.2 New Pupsbot Update! --
-            - Enhanced tracking system with Map and multiple intervals
-            - Optimized TTL management for Redis suggestions
-            - Intelligent beatmap selection with DistributionManager
-            - Improved error handling for Redis and Database
-            - Progressive fallback system for better results
-            - Dashboard for tracking suggestions and modifying preferences [https://pb.pupsweb.cc -> Link]
+                : `-- v2.4.0 New Pupsbot Update! --
+            - Minor fixes
+            - Steadier statistics
+            - Tighter osu! API budget: commands go first, everything else waits its turn
+            - Replies can take a little longer. That is the cost of staying inside the quota
                 `;
 
             await queue.addToQueue(event.nick, responseMessage, false, event.id, true);

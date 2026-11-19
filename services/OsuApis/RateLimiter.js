@@ -7,7 +7,14 @@ class RateLimiter {
 
         this.tokens = maxBurstRequests;
         this.lastRefill = Date.now();
-        this.requestQueue = [];
+        this.interactiveQueue = [];
+        this.bulkQueue = [];
+        this.reworkQueue = [];
+        this.lowQueue = [];
+        this.queueTimer = null;
+        this.reworkMode = false;
+        this.reworkSeenAt = 0;
+        this.lastLowDispatch = 0;
 
         this.requestHistory = [];
 
@@ -30,9 +37,17 @@ class RateLimiter {
         this.requestHistory = this.requestHistory.filter(timestamp => timestamp > oneMinuteAgo);
     }
 
-    async waitForToken() {
+    async waitForToken(priority = 'bulk') {
         return new Promise((resolve) => {
-            this.requestQueue.push(resolve);
+            if (priority === 'interactive') {
+                this.interactiveQueue.push(resolve);
+            } else if (priority === 'rework') {
+                this.reworkQueue.push(resolve);
+            } else if (priority === 'low') {
+                this.lowQueue.push(resolve);
+            } else {
+                this.bulkQueue.push(resolve);
+            }
             this.processQueue();
         });
     }
@@ -41,14 +56,52 @@ class RateLimiter {
         this.refillTokens();
         this.cleanOldRequests();
 
-        while (this.requestQueue.length > 0 && this.canMakeRequest()) {
-            const resolve = this.requestQueue.shift();
+        while (this.interactiveQueue.length > 0 && this.canMakeRequest()) {
+            const resolve = this.interactiveQueue.shift();
             this.makeRequest();
             resolve();
         }
 
-        if (this.requestQueue.length > 0) {
-            setTimeout(() => this.processQueue(), 1000);
+        while (this.bulkQueue.length > 0 && this.canMakeRequest()) {
+            const resolve = this.bulkQueue.shift();
+            this.makeRequest();
+            resolve();
+        }
+
+        const reworkActive = this.isReworkMode();
+
+        if (reworkActive) {
+            if (this.lowQueue.length > 0 && this.canMakeRequest() && Date.now() - this.lastLowDispatch >= 60000) {
+                const resolve = this.lowQueue.shift();
+                this.makeRequest();
+                this.lastLowDispatch = Date.now();
+                resolve();
+            }
+
+            while (this.reworkQueue.length > 0 && this.canMakeRequest()) {
+                const resolve = this.reworkQueue.shift();
+                this.makeRequest();
+                resolve();
+            }
+        } else {
+            while (this.reworkQueue.length > 0 && this.canMakeRequest()) {
+                const resolve = this.reworkQueue.shift();
+                this.makeRequest();
+                resolve();
+            }
+
+            while (this.lowQueue.length > 0 && this.canMakeRequest()) {
+                const resolve = this.lowQueue.shift();
+                this.makeRequest();
+                resolve();
+            }
+        }
+
+        if ((this.interactiveQueue.length > 0 || this.bulkQueue.length > 0 || this.reworkQueue.length > 0 || this.lowQueue.length > 0) && !this.queueTimer) {
+            this.queueTimer = setTimeout(() => {
+                this.queueTimer = null;
+                this.processQueue();
+            }, 1000);
         }
     }
 
@@ -71,16 +124,32 @@ class RateLimiter {
         Logger.service(`RateLimiter: Request made. Tokens: ${this.tokens}, Requests/min: ${this.requestHistory.length}`);
     }
 
-    async executeRequest(requestFunction) {
-        await this.waitForToken();
+    setReworkMode(active) {
+        this.reworkMode = active === true;
+        this.reworkSeenAt = Date.now();
+        Logger.service(`RateLimiter: rework mode ${this.reworkMode ? 'on' : 'off'}`);
+    }
 
-        try {
-            const result = await requestFunction();
-            return result;
-        } catch (error) {
-            Logger.errorCatch('RateLimiter', `Request failed but token consumed: ${error.message}`);
-            throw error;
+    touchRework() {
+        this.reworkMode = true;
+        this.reworkSeenAt = Date.now();
+    }
+
+    isReworkMode() {
+        if (!this.reworkMode) {
+            return false;
         }
+        if (Date.now() - this.reworkSeenAt > 120000) {
+            this.reworkMode = false;
+            Logger.service('RateLimiter: rework mode expired');
+            return false;
+        }
+        return true;
+    }
+
+    async executeRequest(requestFunction, priority = 'bulk') {
+        await this.waitForToken(priority);
+        return await requestFunction();
     }
 
     getStats() {
@@ -92,7 +161,12 @@ class RateLimiter {
             maxTokens: this.maxBurstRequests,
             requestsInLastMinute: this.requestHistory.length,
             maxRequestsPerMinute: this.maxRequestsPerMinute,
-            queuedRequests: this.requestQueue.length,
+            queuedRequests: this.interactiveQueue.length + this.bulkQueue.length + this.reworkQueue.length + this.lowQueue.length,
+            interactiveQueued: this.interactiveQueue.length,
+            bulkQueued: this.bulkQueue.length,
+            reworkQueued: this.reworkQueue.length,
+            lowQueued: this.lowQueue.length,
+            reworkMode: this.isReworkMode(),
             utilizationPercent: Math.round((this.requestHistory.length / this.maxRequestsPerMinute) * 100)
         };
     }

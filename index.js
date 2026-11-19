@@ -18,12 +18,14 @@ const InfrastructureNtfyMonitor = require('./services/InfrastructureNtfyMonitor'
 const AutoMessageManager = require('./services/AutoMessageManager');
 const OsuApiClient = require('./services/OsuApis/Client');
 const UserRateLimiter = require('./services/UserRateLimiter');
+const { activateDegradedMode, activateNoApiMode, isDegradedModeActive, shouldSkipApi, getDegradedMessage } = require('./services/DegradedMode');
 const notifier = new Notifier();
 const OsuUtils = require('osu-utils');
 const osuUtils = new OsuUtils();
 const TokenKeyInline = require('./services/GeneratePupswebLink');
 
 let healthMonitor, performe, metricsCollector, workerMonitor, osuApiInternalServer, infrastructureNtfyMonitor, userRateLimiter;
+let redisReady = false;
 global.temp = [];
 global.activeWorkers = [];
 global.userRequest = [];
@@ -40,30 +42,51 @@ const pupsbotSecondConnection = (() => {
 
 (async () => {
 
+    if (process.env.DEGRADED_MODE === 'true') {
+        activateDegradedMode('DEGRADED_MODE forced');
+    }
+    if (process.env.NO_API === 'true') {
+        activateNoApiMode('NO_API forced');
+    }
+
     performe = new RedisStore();
     metricsCollector = new MetricsCollector();
     const db = new SQL();
     healthMonitor = new BotHealthMonitor();
     workerMonitor = new WorkerMonitor();
-    osuApiInternalServer = new OsuApiInternalServer(25586);
-    userRateLimiter = new UserRateLimiter(2, 30000); // 2 req/sec, 30s block
+    userRateLimiter = new UserRateLimiter(2, 30000);
 
-    await performe.init();
-    await metricsCollector.init();
-    await healthMonitor.init();
+    try {
+        if (!global.degradedMode) {
+            await performe.init();
+            await metricsCollector.init();
+            await healthMonitor.init();
+            await db.sequelize.authenticate();
+            redisReady = true;
+        }
+    } catch (err) {
+        activateDegradedMode(err.message);
+        Logger.service('Starting without full backend, degraded mode enabled');
+    }
 
-    global.autoMessageManager = new AutoMessageManager(performe);
-
-    workerMonitor.startMonitoring();
-    await osuApiInternalServer.start();
+    if (redisReady) {
+        global.autoMessageManager = new AutoMessageManager(performe);
+        workerMonitor.startMonitoring();
+    }
 
     global.workerMonitor = workerMonitor;
     global.botHealthMonitor = healthMonitor;
-    global.osuApiClient = new OsuApiClient('http://localhost:25586');
     global.performe = performe;
     global.db = db;
 
-    Logger.service('OsuApi internal server started and client available globally');
+    if (!shouldSkipApi()) {
+        osuApiInternalServer = new OsuApiInternalServer(25586);
+        await osuApiInternalServer.start();
+        global.osuApiClient = new OsuApiClient('http://localhost:25586');
+        Logger.service('OsuApi internal server started and client available globally');
+    } else {
+        Logger.service('No-API mode: OsuApi internal server not started');
+    }
 
     // Service health check function
     async function checkServiceHealth() {
@@ -259,6 +282,7 @@ const pupsbotSecondConnection = (() => {
     }
 
     setInterval(async () => {
+        if (!redisReady) return;
         await refreshTrackers(performe);
         await runTrackers();
     }, 1000);
@@ -271,6 +295,15 @@ const pupsbotSecondConnection = (() => {
     const lastRequests = {};
     const migrationNoticeSent = new Set();
     let ircBot1, ircBot2, queue1, queue2, commandManager;
+
+    async function sendDegradedReply(nick, queue, user = null) {
+        if (!isDegradedModeActive()) return false;
+        let locale = null;
+        if (user?.locale === 'FR') locale = 'FR';
+        else if (user?.locale) locale = 'EN';
+        await queue.addToQueue(nick, getDegradedMessage(locale), true, generateId(), true);
+        return true;
+    }
 
     try {
         ircBot1 = new OsuIRCClient({
@@ -312,7 +345,9 @@ const pupsbotSecondConnection = (() => {
         }
 
         commandManager = new CommandManager();
-        healthMonitor.startMonitoring(1000);
+        if (redisReady) {
+            healthMonitor.startMonitoring(1000);
+        }
 
     } catch (err) {
         Logger.errorCatch('Startup', err);
@@ -325,7 +360,9 @@ const pupsbotSecondConnection = (() => {
         getSecondaryIrc: () => ircBot2,
         secondaryConfigured: !!(process.env.IRC_USERNAME_2 && process.env.IRC_PASSWORD_2)
     });
-    infrastructureNtfyMonitor.start();
+    if (!global.degradedMode) {
+        infrastructureNtfyMonitor.start();
+    }
 
     ircBot1?.onAction(async ({ target, message, nick }) => {
         try {
@@ -336,6 +373,8 @@ const pupsbotSecondConnection = (() => {
                 userRateLimiter.logRateLimit(nick, rateLimitResult);
                 return;
             }
+
+            if (await sendDegradedReply(nick, queue1)) return;
 
             const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
             if (!beatmapId) return;
@@ -392,6 +431,8 @@ const pupsbotSecondConnection = (() => {
                 return;
             }
 
+            if (await sendDegradedReply(nick, queue2)) return;
+
             const beatmapId = (message.match(/\/b\/(\d+)/) || message.match(/beatmapsets\/\d+#\/(\d+)/) || [])[1];
             if (!beatmapId) return;
             const id = generateId()
@@ -445,11 +486,15 @@ const pupsbotSecondConnection = (() => {
             event.receivingBot = pupsbotSecondConnection ? 'aux' : 'pupsbot';
 
             let user = null;
-            try {
-                user = await global.osuApiClient.getUser(event.nick, "osu", "username");
-            } catch (error) {
-                Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+            if (!isDegradedModeActive()) {
+                try {
+                    user = await global.osuApiClient.getUser(event.nick, "osu", "username");
+                } catch (error) {
+                    Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+                }
             }
+
+            if (await sendDegradedReply(event.nick, queue1, user)) return;
 
             if (!migrationNoticeSent.has(event.nick.toLowerCase())) {
                 const isFR = user?.locale === 'FR';
@@ -487,11 +532,15 @@ const pupsbotSecondConnection = (() => {
             event.receivingBot = pupsbotSecondConnection ? 'pupsbot' : 'aux';
 
             let user = null;
-            try {
-                user = await global.osuApiClient.getUser(event.nick, "osu", "username");
-            } catch (error) {
-                Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+            if (!isDegradedModeActive()) {
+                try {
+                    user = await global.osuApiClient.getUser(event.nick, "osu", "username");
+                } catch (error) {
+                    Logger.errorCatch('getUser', `Failed to get user ${event.nick}: ${error.message}`);
+                }
             }
+
+            if (await sendDegradedReply(event.nick, queue2, user)) return;
 
             await commandManager.handleMessage(event, queue2, lastRequests, user, {
                 botFocus: pupsbotSecondConnection ? 'main' : 'aux',
@@ -509,7 +558,7 @@ async function gracefulShutdown() {
     try {
         Logger.service('Shutting down gracefully...');
 
-        if (healthMonitor) {
+        if (healthMonitor && redisReady) {
             await healthMonitor.close();
         }
 
@@ -517,11 +566,11 @@ async function gracefulShutdown() {
             infrastructureNtfyMonitor.stop();
         }
 
-        if (performe) {
+        if (performe && redisReady) {
             await performe.close();
         }
 
-        if (metricsCollector) {
+        if (metricsCollector && redisReady) {
             await metricsCollector.close();
         }
 

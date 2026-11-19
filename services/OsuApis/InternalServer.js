@@ -69,9 +69,8 @@ class OsuApiInternalServer {
         this.app.get('/user/:userId/full', async (req, res) => {
             try {
                 const { userId } = req.params;
-                const fullUser = await this.apiManager.rateLimiter.executeRequest(async () => {
-                    return await this.apiManager.v2.getFullUser(userId);
-                });
+                const priority = req.query.priority === 'low' ? 'low' : null;
+                const fullUser = await this.apiManager.v2.getFullUser(userId, priority);
                 res.json({
                     success: true,
                     data: fullUser
@@ -103,6 +102,52 @@ class OsuApiInternalServer {
                     success: false,
                     error: error.message
                 });
+            }
+        });
+
+        this.app.get('/user/:userId/scores/best-raw', async (req, res) => {
+            try {
+                const { userId } = req.params;
+                const options = {
+                    mode: req.query.mode || 'osu',
+                    limit: parseInt(req.query.limit) || 100,
+                    offset: parseInt(req.query.offset) || 0
+                };
+
+                const scores = await this.apiManager.v2.getUserBestScores(userId, options, 'low');
+                res.json({
+                    success: true,
+                    data: scores
+                });
+            } catch (error) {
+                res.status(500).json({
+                    success: false,
+                    error: error.message
+                });
+            }
+        });
+
+        this.app.post('/rework/session', (req, res) => {
+            this.apiManager.rateLimiter.setReworkMode(true);
+            res.json({ success: true, reworkMode: true });
+        });
+
+        this.app.delete('/rework/session', (req, res) => {
+            this.apiManager.rateLimiter.setReworkMode(false);
+            res.json({ success: true, reworkMode: false });
+        });
+
+        this.app.get('/scores/osu/:scoreId', async (req, res) => {
+            try {
+                this.apiManager.rateLimiter.touchRework();
+                const score = await this.apiManager.v2.getScore(req.params.scoreId, 'rework');
+                if (!score) {
+                    res.status(404).json({ success: false, notFound: true });
+                    return;
+                }
+                res.json({ success: true, data: score });
+            } catch (error) {
+                res.status(500).json({ success: false, error: error.message });
             }
         });
 
@@ -338,6 +383,7 @@ class OsuApiInternalServer {
 
         try {
             await this.init();
+            global.osuRateLimiter = this.apiManager.rateLimiter;
 
             this.server = this.app.listen(this.port, () => {
                 this.isRunning = true;

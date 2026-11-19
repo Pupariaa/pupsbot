@@ -3,6 +3,7 @@ const fs = require('fs');
 const generateId = require('../utils/generateId');
 const Logger = require('../utils/Logger');
 const Notifier = require('../services/Notifier');
+const { isDegradedModeActive, getDegradedMessage } = require('./DegradedMode');
 const notifier = new Notifier();
 
 class CommandManager {
@@ -50,6 +51,14 @@ class CommandManager {
             receivingBot: resolvedReceivingBot,
             pupsbotIrcSession: options.pupsbotIrcSession === true
         };
+
+        if (isDegradedModeActive()) {
+            let locale = null;
+            if (user?.locale === 'FR') locale = 'FR';
+            else if (user?.locale) locale = 'EN';
+            await queue.addToQueue(event.nick, getDegradedMessage(locale), true, event.id, true);
+            return;
+        }
 
         const command = this.commands.get(commandName);
 

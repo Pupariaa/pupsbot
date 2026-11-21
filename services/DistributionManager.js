@@ -10,7 +10,7 @@ class DistributionManager {
 
     async loadDistributionData() {
         try {
-            const filePath = path.join(__dirname, '../most_distribued-16-10-2025.json');
+            const filePath = path.join(__dirname, '../most_distribued-18-11-2026.json');
             const rawData = fs.readFileSync(filePath, 'utf8');
             const jsonData = JSON.parse(rawData);
 

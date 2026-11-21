@@ -7,7 +7,7 @@ const { shouldSkipBackend } = require('../DegradedMode');
 
 class OsuApiManager {
     constructor() {
-        this.rateLimiter = new RateLimiter(60, 10);
+        this.rateLimiter = new RateLimiter(60, 10, 60, 12);
         this.v2 = new V2(this.rateLimiter);
         this.redis = null;
         this.metrics = null;

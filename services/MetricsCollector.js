@@ -923,6 +923,8 @@ class MetricsCollector {
             bulkQueued: Number(stats.bulkQueued) || 0,
             reworkQueued: Number(stats.reworkQueued) || 0,
             lowQueued: Number(stats.lowQueued) || 0,
+            lowRequestsInLastMinute: Number(stats.lowRequestsInLastMinute) || 0,
+            lowTokensAvailable: Number(stats.lowTokensAvailable) || 0,
             reworkMode: stats.reworkMode ? 1 : 0
         });
     }

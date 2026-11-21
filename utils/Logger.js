@@ -1,6 +1,22 @@
 const fs = require('fs');
 const path = require('path');
 
+let relayNotifier = null;
+
+function relayNtfy(level, category, message) {
+    try {
+        if (!relayNotifier) {
+            const Notifier = require('../services/Notifier');
+            relayNotifier = new Notifier();
+        }
+        relayNotifier.publish(level, category, message).catch((error) => {
+            console.error('[ntfy] publish failed', error.message);
+        });
+    } catch (error) {
+        console.error('[ntfy] relay failed', error.message);
+    }
+}
+
 class Logger {
     constructor() {
         this.logLevels = {
@@ -155,6 +171,30 @@ class Logger {
         } catch (err) {
             console.error('Failed to write to log file:', err.message);
         }
+        this._relay(level, category, sanitizedMessage);
+    }
+
+    _infoWorthSending(message) {
+        return message.startsWith('OsuApi internal server started')
+            || message.startsWith('Panel degraded mode')
+            || message.startsWith('Shutting down gracefully')
+            || message.startsWith('Graceful shutdown complete')
+            || message.startsWith('OsuApi internal server stopped');
+    }
+
+    _relay(level, category, message) {
+        let chosen = null;
+        if (level === 'ERROR') {
+            if (/status code 404|\bHTTP 404\b/.test(message)) chosen = 'info';
+            else if (category === 'uncaughtException' || category === 'unhandledRejection') chosen = 'panic';
+            else chosen = 'error';
+        } else if (level === 'WARN') {
+            chosen = 'warn';
+        } else if (level === 'INFO' && this._infoWorthSending(message)) {
+            chosen = 'info';
+        }
+        if (!chosen) return;
+        relayNtfy(chosen, category, message);
     }
 
     error(category, message, error = null) {
@@ -185,6 +225,11 @@ class Logger {
 
     success(category, message, metadata = {}) {
         this._log('SUCCESS', category, message, metadata);
+    }
+
+    static warn(category, message, metadata = {}) {
+        const logger = new Logger();
+        logger.warn(category, message, metadata);
     }
 
     static service(message) {

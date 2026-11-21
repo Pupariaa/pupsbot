@@ -27,6 +27,52 @@ class OsuApiV2 {
         this.rateLimiter = rateLimiter;
     }
 
+    serviceDown(error) {
+        const code = error && error.code;
+        const message = String(error && error.message || '');
+        return code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'EPIPE' || code === 'EAI_AGAIN' || message.includes('socket hang up');
+    }
+
+    async callService(endpoint, options, priority) {
+        let lastError = null;
+        for (let attempt = 0; attempt < 8; attempt++) {
+            try {
+                const response = await axios({
+                    method: 'POST',
+                    url: `${process.env.OSU_SERVICE_URL}/v1/call`,
+                    timeout: 120000,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Osu-Key': process.env.OSU_SERVICE_SECRET || ''
+                    },
+                    data: {
+                        method: String(options.method || 'GET').toUpperCase(),
+                        path: endpoint,
+                        body: options.data === undefined ? null : options.data,
+                        priority
+                    },
+                    validateStatus: () => true
+                });
+                if (response.status !== 200 || !response.data || typeof response.data.status !== 'number') {
+                    const error = new Error(`Request failed with status code ${response.status || 502}`);
+                    error.response = { status: response.status || 502, data: response.data };
+                    throw error;
+                }
+                if (response.data.status >= 400) {
+                    const error = new Error(`Request failed with status code ${response.data.status}`);
+                    error.response = { status: response.data.status, data: response.data.data };
+                    throw error;
+                }
+                return response.data.data;
+            } catch (error) {
+                if (error.response || !this.serviceDown(error) || attempt === 7) throw error;
+                lastError = error;
+                await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+            }
+        }
+        throw lastError;
+    }
+
     async initializeAuth() {
         try {
             await this.auth.getClientCredentialsToken();
@@ -44,67 +90,29 @@ class OsuApiV2 {
             await performe.init();
             await metricsCollector.init();
             const t = performe.startTimer();
-            const accessToken = await this.auth.getValidAccessToken();
-
-            const config = {
-                ...options,
-                url: `${this.baseUrl}${endpoint}`,
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    ...options.headers
-                }
-            };
-
             const resolvedPriority = priority || requestPriority(operationName);
-            const response = await this.rateLimiter.executeRequest(() => axios(config), resolvedPriority);
+            const data = await this.callService(endpoint, options, resolvedPriority);
             duration = await t.stop(operationName);
 
             await metricsCollector.recordServicePerformance('api', operationName, duration, 'v2');
 
-            return response.data;
+            return data;
         } catch (error) {
             if (duration === null) {
                 duration = 0;
             }
-            if (error.response?.status === 401) {
-                try {
-                    Logger.service('OsuApiV2: Token expired, getting new token');
-                    this.auth.clearTokenData();
-                    const newAccessToken = await this.auth.getValidAccessToken();
 
-                    const retryConfig = {
-                        ...options,
-                        url: `${this.baseUrl}${endpoint}`,
-                        headers: {
-                            'Authorization': `Bearer ${newAccessToken}`,
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            ...options.headers
-                        }
-                    };
-
-                    const retryResponse = await this.rateLimiter.executeRequest(() => axios(retryConfig), priority || requestPriority(operationName));
-                    return retryResponse.data;
-                } catch (retryError) {
-                    const msg = `API V2 request failed after token renewal: ${retryError.message}`;
-                    metricsCollector.recordApiFailure(operationName, retryError.response?.status);
-                    Logger.errorCatch('OsuApiV2', msg);
-                    await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
-                    throw new Error(msg);
-                }
-            }
-
-            // Handle 404 as a special case - don't log as error for getUserBeatmapScore
-            if (error.response?.status === 404 && (operationName === 'GETUSERBEATMAPSCORE_V2' || operationName === 'GETSCORE_V2')) {
+            if (error.response?.status === 404) {
                 throw error;
             }
 
-            metricsCollector.recordApiFailure(operationName, error.response?.status);
-            const msg = `API V2 request failed: ${error.response?.data?.error || error.message}`;
+            const status = error.response?.status;
+            metricsCollector.recordApiFailure(operationName, status);
+            const msg = status >= 500
+                ? `API V2 HTTP ${status}: ${error.response?.data?.error || error.message}`
+                : `API V2 request failed: ${error.response?.data?.error || error.message}`;
             Logger.errorCatch('OsuApiV2', msg);
-            await this.notifier.send(msg, `OSUAPIV2.${operationName}`);
+            await this.notifier.send(msg, status >= 500 ? 'OSUAPIV2.HTTP500' : `OSUAPIV2.${operationName}`);
             throw new Error(msg);
         } finally {
             if (performe) {
@@ -344,17 +352,11 @@ class OsuApiV2 {
 
             const t = performe.startTimer();
             const results = {};
-
-            for (let i = 0; i < modes.length; i++) {
-                const mode = modes[i];
-                const modeName = modeNames[i];
-
-
+            const fetched = await Promise.all(modes.map(async (mode) => {
                 let allScores = [];
                 let offset = 0;
                 const limit = 100;
                 let hasMoreScores = true;
-
                 while (hasMoreScores && offset < 1000) {
                     try {
                         const scores = await this.getUserBestScores(userId, {
@@ -362,25 +364,21 @@ class OsuApiV2 {
                             limit,
                             offset
                         });
-
-                        if (!scores || scores.length === 0) {
-                            hasMoreScores = false;
-                            break;
-                        }
-
+                        if (!scores || scores.length === 0) break;
                         allScores = allScores.concat(scores);
                         offset += limit;
-
-
-                        if (scores.length < limit) {
-                            hasMoreScores = false;
-                        }
+                        if (scores.length < limit) hasMoreScores = false;
                     } catch (error) {
                         Logger.errorCatch('OsuApiV2', `Error fetching scores for ${mode} at offset ${offset}: ${error.message}`);
                         hasMoreScores = false;
                     }
                 }
+                return allScores;
+            }));
 
+            for (let i = 0; i < modes.length; i++) {
+                const modeName = modeNames[i];
+                const allScores = fetched[i];
 
                 const rawScores = allScores.map(score => {
                     const modsArray = Array.isArray(score.mods) ? score.mods : [];

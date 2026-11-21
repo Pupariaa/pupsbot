@@ -56,7 +56,7 @@ class UserPreferencesManager {
                 mods: preferences.mods || this.defaultPreferences.mods,
                 allowAnyMods: preferences.allowAnyMods !== undefined ? preferences.allowAnyMods : this.defaultPreferences.allowAnyMods,
                 autoAlgorithm: preferences.autoAlgorithm !== undefined ? preferences.autoAlgorithm : this.defaultPreferences.autoAlgorithm,
-                algorithm: preferences.algorithm || this.defaultPreferences.algorithm,
+                algorithm: this.defaultPreferences.algorithm,
                 autoPP: preferences.autoPP !== undefined ? preferences.autoPP : this.defaultPreferences.autoPP,
                 pp: preferences.pp || this.defaultPreferences.pp,
                 autoBPM: preferences.autoBPM !== undefined ? preferences.autoBPM : this.defaultPreferences.autoBPM,

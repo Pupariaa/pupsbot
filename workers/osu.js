@@ -343,7 +343,7 @@ process.on('message', async (data) => {
 
         const buildSortListWithProgressiveFallback = async (ppMargin) => {
             const list = [];
-            const chunkSize = 10;
+            const chunkSize = Math.max(filtered.length, 1);
 
             const maxScores = filtered.length;
 

@@ -230,9 +230,6 @@ class BotHealthMonitor {
     }
 
     recordRateLimiter() {
-        const limiter = global.osuRateLimiter;
-        if (!limiter || typeof limiter.getStats !== 'function') return;
-        this.metricsCollector.recordRateLimiter(limiter.getStats());
     }
 
     async recordServicePerformance(heapUsedMB, rssMB, externalMB, maxRSSMB, lagMean, lagMax, lagStddev, cpuUsage, gcSummary) {

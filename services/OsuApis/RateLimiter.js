@@ -1,12 +1,11 @@
 const Logger = require('../../utils/Logger');
 
 class RateLimiter {
-    constructor(maxRequestsPerMinute = 60, maxBurstRequests = 10) {
-        this.maxRequestsPerMinute = maxRequestsPerMinute;
-        this.maxBurstRequests = maxBurstRequests;
-
-        this.tokens = maxBurstRequests;
-        this.lastRefill = Date.now();
+    constructor(corePerMinute = 60, coreBurst = 10, lowPerMinute = 60, lowBurst = 12) {
+        this.corePerMinute = corePerMinute;
+        this.lowPerMinute = lowPerMinute;
+        this.core = this.makeBucket(corePerMinute, coreBurst);
+        this.low = this.makeBucket(lowPerMinute, lowBurst);
         this.interactiveQueue = [];
         this.bulkQueue = [];
         this.reworkQueue = [];
@@ -14,27 +13,48 @@ class RateLimiter {
         this.queueTimer = null;
         this.reworkMode = false;
         this.reworkSeenAt = 0;
-        this.lastLowDispatch = 0;
 
-        this.requestHistory = [];
+        Logger.service(`RateLimiter: Initialized with ${corePerMinute} req/min direct and ${lowPerMinute} req/min relay`);
+    }
 
-        Logger.service(`RateLimiter: Initialized with ${maxRequestsPerMinute} req/min limit and ${maxBurstRequests} burst capacity`);
+    makeBucket(max, burst) {
+        return { max, burst, tokens: burst, lastRefill: Date.now(), carry: 0, history: [] };
+    }
+
+    relayEnabled() {
+        return Boolean(process.env.OSU_RELAY_URL && process.env.OSU_RELAY_SECRET);
+    }
+
+    lane(priority) {
+        if ((priority === 'low' || priority === 'rework') && this.relayEnabled()) return this.low;
+        return this.core;
+    }
+
+    refill(bucket) {
+        const now = Date.now();
+        const elapsed = now - bucket.lastRefill;
+        if (elapsed <= 0) return;
+        bucket.lastRefill = now;
+        if (bucket.tokens >= bucket.burst) return;
+        const raw = elapsed * (bucket.max / 60000) + bucket.carry;
+        const tokensToAdd = Math.floor(raw);
+        bucket.carry = raw - tokensToAdd;
+        if (tokensToAdd > 0) bucket.tokens = Math.min(bucket.burst, bucket.tokens + tokensToAdd);
+    }
+
+    clean(bucket) {
+        const oneMinuteAgo = Date.now() - 60000;
+        bucket.history = bucket.history.filter(timestamp => timestamp > oneMinuteAgo);
     }
 
     refillTokens() {
-        const now = Date.now();
-        const timePassed = now - this.lastRefill;
-        const tokensToAdd = Math.floor(timePassed / 1000);
-
-        if (tokensToAdd > 0) {
-            this.tokens = Math.min(this.maxBurstRequests, this.tokens + tokensToAdd);
-            this.lastRefill = now;
-        }
+        this.refill(this.core);
+        this.refill(this.low);
     }
 
     cleanOldRequests() {
-        const oneMinuteAgo = Date.now() - 60000;
-        this.requestHistory = this.requestHistory.filter(timestamp => timestamp > oneMinuteAgo);
+        this.clean(this.core);
+        this.clean(this.low);
     }
 
     async waitForToken(priority = 'bulk') {
@@ -56,72 +76,51 @@ class RateLimiter {
         this.refillTokens();
         this.cleanOldRequests();
 
-        while (this.interactiveQueue.length > 0 && this.canMakeRequest()) {
+        while (this.interactiveQueue.length > 0 && this.canMakeRequest('interactive')) {
             const resolve = this.interactiveQueue.shift();
-            this.makeRequest();
+            this.makeRequest('interactive');
             resolve();
         }
 
-        while (this.bulkQueue.length > 0 && this.canMakeRequest()) {
+        while (this.bulkQueue.length > 0 && this.canMakeRequest('bulk')) {
             const resolve = this.bulkQueue.shift();
-            this.makeRequest();
+            this.makeRequest('bulk');
             resolve();
         }
 
-        const reworkActive = this.isReworkMode();
+        while (this.reworkQueue.length > 0 && this.canMakeRequest('rework')) {
+            const resolve = this.reworkQueue.shift();
+            this.makeRequest('rework');
+            resolve();
+        }
 
-        if (reworkActive) {
-            if (this.lowQueue.length > 0 && this.canMakeRequest() && Date.now() - this.lastLowDispatch >= 60000) {
-                const resolve = this.lowQueue.shift();
-                this.makeRequest();
-                this.lastLowDispatch = Date.now();
-                resolve();
-            }
-
-            while (this.reworkQueue.length > 0 && this.canMakeRequest()) {
-                const resolve = this.reworkQueue.shift();
-                this.makeRequest();
-                resolve();
-            }
-        } else {
-            while (this.reworkQueue.length > 0 && this.canMakeRequest()) {
-                const resolve = this.reworkQueue.shift();
-                this.makeRequest();
-                resolve();
-            }
-
-            while (this.lowQueue.length > 0 && this.canMakeRequest()) {
-                const resolve = this.lowQueue.shift();
-                this.makeRequest();
-                resolve();
-            }
+        while (this.lowQueue.length > 0 && this.canMakeRequest('low')) {
+            const resolve = this.lowQueue.shift();
+            this.makeRequest('low');
+            resolve();
         }
 
         if ((this.interactiveQueue.length > 0 || this.bulkQueue.length > 0 || this.reworkQueue.length > 0 || this.lowQueue.length > 0) && !this.queueTimer) {
             this.queueTimer = setTimeout(() => {
                 this.queueTimer = null;
                 this.processQueue();
-            }, 1000);
+            }, 500);
         }
     }
 
-    canMakeRequest() {
-        if (this.tokens <= 0) {
-            return false;
-        }
-
-        if (this.requestHistory.length >= this.maxRequestsPerMinute) {
-            return false;
-        }
-
+    canMakeRequest(priority = 'bulk') {
+        const bucket = this.lane(priority);
+        if (bucket.tokens <= 0) return false;
+        if (bucket.history.length >= bucket.max) return false;
         return true;
     }
 
-    makeRequest() {
-        this.tokens--;
-        this.requestHistory.push(Date.now());
-
-        Logger.service(`RateLimiter: Request made. Tokens: ${this.tokens}, Requests/min: ${this.requestHistory.length}`);
+    makeRequest(priority = 'bulk') {
+        const bucket = this.lane(priority);
+        bucket.tokens--;
+        bucket.history.push(Date.now());
+        const lane = bucket === this.low ? 'relay' : 'direct';
+        Logger.service(`RateLimiter: Request made. Lane: ${lane}, Tokens: ${bucket.tokens}, Requests/min: ${bucket.history.length}`);
     }
 
     setReworkMode(active) {
@@ -155,25 +154,34 @@ class RateLimiter {
     getStats() {
         this.refillTokens();
         this.cleanOldRequests();
+        const relay = this.relayEnabled();
+        const total = this.core.history.length + (relay ? this.low.history.length : 0);
+        const totalMax = this.core.max + (relay ? this.low.max : 0);
 
         return {
-            tokensAvailable: this.tokens,
-            maxTokens: this.maxBurstRequests,
-            requestsInLastMinute: this.requestHistory.length,
-            maxRequestsPerMinute: this.maxRequestsPerMinute,
+            tokensAvailable: this.core.tokens,
+            lowTokensAvailable: this.low.tokens,
+            maxTokens: this.core.burst,
+            requestsInLastMinute: total,
+            coreRequestsInLastMinute: this.core.history.length,
+            lowRequestsInLastMinute: relay ? this.low.history.length : 0,
+            maxRequestsPerMinute: totalMax,
+            coreRequestsPerMinute: this.core.max,
+            lowRequestsPerMinute: this.low.max,
             queuedRequests: this.interactiveQueue.length + this.bulkQueue.length + this.reworkQueue.length + this.lowQueue.length,
             interactiveQueued: this.interactiveQueue.length,
             bulkQueued: this.bulkQueue.length,
             reworkQueued: this.reworkQueue.length,
             lowQueued: this.lowQueue.length,
             reworkMode: this.isReworkMode(),
-            utilizationPercent: Math.round((this.requestHistory.length / this.maxRequestsPerMinute) * 100)
+            relay: relay ? 1 : 0,
+            utilizationPercent: Math.round((total / totalMax) * 100)
         };
     }
 
     async waitIfNeeded() {
         if (!this.canMakeRequest()) {
-            const waitTime = this.tokens <= 0 ? 1000 : 0; // Wait 1 second if no tokens
+            const waitTime = this.core.tokens <= 0 ? 1000 : 0;
             if (waitTime > 0) {
                 Logger.service(`RateLimiter: Waiting ${waitTime}ms for token refill`);
                 await new Promise(resolve => setTimeout(resolve, waitTime));

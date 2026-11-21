@@ -37,22 +37,12 @@ class Performe {
         }
     }
 
-    async logDuration(command, durationMs) {
-        try {
-            await this._ensureReady();
-            await this._redis.zAdd(`perf:duration:${command}`, [{ score: Date.now(), value: durationMs.toString() }]);
-        } catch (error) {
-            Logger.errorCatch('PERFORME.LOG_DURATION', error);
-        }
+    async logDuration() {
+        return;
     }
 
-    async logCommand(userId, command) {
-        try {
-            await this._ensureReady();
-            await this._redis.zAdd(`perf:command:${command}`, [{ score: Date.now(), value: userId.toString() }]);
-        } catch (error) {
-            Logger.errorCatch('PERFORME.LOG_COMMAND', error);
-        }
+    async logCommand() {
+        return;
     }
 
     async logDBAccess(queryName, durationMs) {
